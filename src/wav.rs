@@ -16,13 +16,15 @@ pub use crate::convert::{convert_s16_le_to_f32, convert_s16_mono_pub};
 pub use crate::header::ProbeCodec;
 pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 
-/// Result of decoding a RIFF/WAVE stream at its native sample rate.
+/// Result of decoding a WAVE stream at its native sample rate.
 ///
 /// `channels` holds exactly one mixed track in [`ChannelMode::Mono`], or one
 /// track per channel in [`ChannelMode::Split`] (all of equal length).
 #[derive(Debug, Clone)]
 pub struct DecodedWav {
+    /// Sample rate from the `fmt ` chunk (Hz).
     pub sample_rate: u32,
+    /// Planar `f32`. Length 1 if mixed; otherwise one vec per channel.
     pub channels: Vec<Vec<f32>>,
 }
 
@@ -122,6 +124,9 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
 }
 
 /// Decode with explicit channel mode and a source label (speech-ingest caps).
+///
+/// `source_label` is stored on [`DecodeOptions`] only; it is not interpolated
+/// into [`WavError`] messages.
 pub fn decode(
     mss: &mut ByteSource<'_>,
     mode: ChannelMode,

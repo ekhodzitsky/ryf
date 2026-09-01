@@ -40,7 +40,11 @@ impl Contiguous<'_> {
     }
 }
 
-/// Seekable byte stream with exact-read helpers used by demuxers/decoders.
+/// Seekable byte stream with exact-read helpers used by demux / decode.
+///
+/// Memory-backed sources (`from_slice` / `from_vec`) expose a contiguous view
+/// so PCM convert can walk the `data` payload without an extra copy.
+/// File / `Read + Seek` sources stream.
 pub struct ByteSource<'a> {
     inner: Box<dyn ReadSeek + 'a>,
     pos: u64,
@@ -49,6 +53,8 @@ pub struct ByteSource<'a> {
 }
 
 impl<'a> ByteSource<'a> {
+    /// Wrap an already-boxed `Read + Seek`. Prefer [`from_slice`],
+    /// [`from_file`], or [`from_read_seek`].
     pub fn new(inner: Box<dyn ReadSeek + 'a>, byte_len: Option<u64>) -> Self {
         Self {
             inner,

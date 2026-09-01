@@ -1,5 +1,6 @@
 test:
     cargo test --lib
+    cargo test --doc
 
 fmt:
     cargo fmt --check

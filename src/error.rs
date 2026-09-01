@@ -1,4 +1,5 @@
-//! Typed errors for the WAVE reader (stable `Display`, no `anyhow` in the public API).
+//! Typed errors for sniff / probe / decode / encode (stable `Display`, no
+//! `anyhow` / `thiserror` in the public API).
 
 use std::fmt;
 use std::io;
@@ -61,7 +62,7 @@ impl WavError {
 
     /// Packet / short-read helper used by pull loops.
     #[inline]
-    pub fn packet_io(err: io::Error) -> Self {
+    pub(crate) fn packet_io(err: io::Error) -> Self {
         Self::format(format!("Error reading packet: {err}"))
     }
 

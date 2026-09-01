@@ -22,6 +22,9 @@ pub fn write_s16(path: &Path, pcm: &[u8], sample_rate: u32) -> Result<()> {
 }
 
 /// Encode mono PCM16. `pcm` is little-endian i16; length must be even.
+///
+/// An empty `pcm` is a valid WAVE (header only). Zero `sample_rate` is
+/// [`WavError::UnsupportedSampleRate`].
 pub fn encode_s16(pcm: &[u8], sample_rate: u32) -> Result<Vec<u8>> {
     if sample_rate == 0 {
         return Err(WavError::sample_rate(0, 1));
@@ -37,6 +40,9 @@ pub fn encode_s16(pcm: &[u8], sample_rate: u32) -> Result<Vec<u8>> {
 }
 
 /// Encode interleaved IEEE float32. `channels` is 1 or 2.
+///
+/// An empty `samples` is a valid WAVE. Other channel counts are
+/// [`WavError::UnsupportedCodec`].
 pub fn encode_f32(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Vec<u8>> {
     if sample_rate == 0 {
         return Err(WavError::sample_rate(0, 1));

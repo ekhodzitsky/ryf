@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-01
+
+### Changed
+
+- README is the crate docs (`include_str`). Support matrix is now
+  container × codec (not a paired two-column list). Documents empty
+  encode vs empty decode, s16 encode peak 32767 vs decode `/32768`,
+  and a hound / symphonia comparison.
+- `WavError::packet_io` is `pub(crate)` (pull-loop helper, not a public
+  constructor).
+
 ## [0.1.2] - 2026-09-01
 
 ### Fixed

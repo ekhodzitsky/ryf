@@ -25,7 +25,8 @@ pub struct DecodeOptions {
     pub max_decode_sample_rate: u32,
     /// Hard cap on decoded planar f32 bytes (`n_out * frames * 4`).
     pub max_output_bytes: u64,
-    /// Optional label for diagnostics (source path / upload id).
+    /// Optional caller label (path / upload id). Stored on the options;
+    /// not interpolated into [`crate::WavError`] messages.
     pub source_label: Option<String>,
 }
 

@@ -23,6 +23,7 @@ native sample rate.
 
 ```sh
 cargo test
+cargo test --doc
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 # impl-only line coverage (exclude sibling tests); target ≥ 90%

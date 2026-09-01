@@ -84,6 +84,7 @@ fn need_duration_check(total_frames: usize, max_samples: usize) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StreamInfo {
     pub sample_rate: u32,
+    /// 1 if mixed ([`ChannelMode::Mono`]); otherwise the source channel count.
     pub channels: usize,
     /// Total frames delivered across all blocks.
     pub frames: usize,
