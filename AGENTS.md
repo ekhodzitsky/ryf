@@ -13,7 +13,8 @@ native sample rate.
 
 - Default features (`adpcm` + `simd`) pull **no crates**.
 - No clap, tokio, anyhow, tracing, thiserror, hound, symphonia on the
-  **product** path. `hound` + `criterion` are **dev-only** bench competitors.
+  **product** path. `hound`, `symphonia`, and `criterion` are **dev-only**
+  bench competitors.
 - Encode is classic RIFF: PCM U8/S16/S24/S32 + IEEE f32, 1–26 ch, plus
   molv drop-in `encode_s16` (mono) / `encode_f32` / `write_s16`. Streaming
   `WavWriter`. No RF64/ADPCM/RIFX write.

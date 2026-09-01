@@ -1,6 +1,6 @@
 [package]
 name = "ryf"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
@@ -26,6 +26,7 @@ tempfile = "3"
 proptest = "1"
 criterion = "0.8"
 hound = "3.5"
+symphonia = { version = "0.5", default-features = false, features = ["wav", "pcm"] }
 
 [[bench]]
 name = "wav"

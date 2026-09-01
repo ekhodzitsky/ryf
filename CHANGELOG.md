@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-01
+
+### Added
+
+- Decode benches vs Symphonia 0.5 (`wav` + `pcm`, zero-copy `MediaSource`)
+  on the same 2 s @ 16 kHz RIFF clips. README table is now three-way.
+
 ## [0.1.5] - 2026-09-01
 
 ### Added

@@ -1,14 +1,23 @@
-//! In-process WAVE decode/encode vs [hound](https://github.com/ruuda/hound).
+//! In-process WAVE decode/encode vs hound and Symphonia.
 //!
 //! Same classic RIFF bytes. Decode is measured through to mixed planar `f32`
 //! (the STT output). hound yields typed samples; the bench converts i16 with
-//! `/ 32768` and mixes stereo the same way ryf does (sum / n).
+//! `/ 32768` and mixes stereo the same way ryf does (sum / n). Symphonia is
+//! probed as WAVE (`wav` + `pcm` features only) from a zero-copy slice.
 //!
 //! ffmpeg is a **correctness oracle**, not a speed peer (process spawn).
-//! symphonia is a multi-format pipeline, not a WAVE specialist — omitted.
+//! Symphonia does not encode.
 
-use std::io::Cursor;
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;
+
+use symphonia::core::audio::SampleBuffer;
+use symphonia::core::codecs::{CODEC_TYPE_NULL, DecoderOptions};
+use symphonia::core::errors::Error as SyError;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::{MediaSource, MediaSourceStream};
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use ryf::{DecodeOptions, WriteSpec, decode_bytes, encode, encode_f32, encode_s16};
@@ -111,6 +120,98 @@ fn hound_encode_f32(samples: &[f32]) -> Vec<u8> {
     cursor.into_inner()
 }
 
+/// Zero-copy `MediaSource` over a `'static` slice (same as ryf `from_slice`).
+struct SliceSrc {
+    inner: Cursor<&'static [u8]>,
+}
+
+impl Read for SliceSrc {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl Seek for SliceSrc {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
+
+impl MediaSource for SliceSrc {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+    fn byte_len(&self) -> Option<u64> {
+        Some(self.inner.get_ref().len() as u64)
+    }
+}
+
+fn leak(bytes: Vec<u8>) -> &'static [u8] {
+    Box::leak(bytes.into_boxed_slice())
+}
+
+fn mix_interleaved_f32(samples: &[f32], ch: usize) -> Vec<f32> {
+    if ch <= 1 {
+        samples.to_vec()
+    } else {
+        let n = ch as f32;
+        samples
+            .chunks_exact(ch)
+            .map(|frame| frame.iter().sum::<f32>() / n)
+            .collect()
+    }
+}
+
+fn symphonia_decode_mixed_f32(wav: &'static [u8]) -> Vec<f32> {
+    let mss = MediaSourceStream::new(
+        Box::new(SliceSrc {
+            inner: Cursor::new(wav),
+        }),
+        Default::default(),
+    );
+    let mut hint = Hint::new();
+    hint.with_extension("wav");
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .expect("symphonia probe");
+    let mut format = probed.format;
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .expect("symphonia track");
+    let track_id = track.id;
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .expect("symphonia decoder");
+    let mut sample_buf = None;
+    let mut interleaved = Vec::new();
+    let mut ch = 1usize;
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(SyError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => panic!("symphonia packet: {e}"),
+        };
+        if packet.track_id() != track_id {
+            continue;
+        }
+        let decoded = decoder.decode(&packet).expect("symphonia decode");
+        ch = decoded.spec().channels.count();
+        let buf = sample_buf.get_or_insert_with(|| {
+            SampleBuffer::<f32>::new(decoded.capacity() as u64, *decoded.spec())
+        });
+        buf.copy_interleaved_ref(decoded);
+        interleaved.extend_from_slice(buf.samples());
+    }
+    mix_interleaved_f32(&interleaved, ch)
+}
+
 fn ryf_decode_mono(wav: &[u8]) -> Vec<f32> {
     decode_bytes(wav, DecodeOptions::speech())
         .expect("ryf decode")
@@ -122,25 +223,28 @@ fn ryf_decode_mono(wav: &[u8]) -> Vec<f32> {
 
 fn benches(c: &mut Criterion) {
     let opts = DecodeOptions::speech();
-    let s16_mono = s16_mono_wav();
-    let s16_st = s16_stereo_wav();
-    let f32_mono = f32_mono_wav();
+    let s16_mono = leak(s16_mono_wav());
+    let s16_st = leak(s16_stereo_wav());
+    let f32_mono = leak(f32_mono_wav());
     let tone = s16_tone();
     let f32_tone: Vec<f32> = tone.iter().map(|&s| s as f32 / 32_768.0).collect();
 
     let mut decode = c.benchmark_group("decode");
     decode.throughput(Throughput::Bytes(s16_mono.len() as u64));
     decode.bench_function("ryf/s16_mono_2s", |b| {
-        b.iter(|| std::hint::black_box(ryf_decode_mono(&s16_mono)));
+        b.iter(|| std::hint::black_box(ryf_decode_mono(s16_mono)));
     });
     decode.bench_function("hound/s16_mono_2s", |b| {
-        b.iter(|| std::hint::black_box(hound_s16_to_mixed_f32(&s16_mono)));
+        b.iter(|| std::hint::black_box(hound_s16_to_mixed_f32(s16_mono)));
+    });
+    decode.bench_function("symphonia/s16_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(s16_mono)));
     });
     decode.throughput(Throughput::Bytes(s16_st.len() as u64));
     decode.bench_function("ryf/s16_stereo_mix_2s", |b| {
         b.iter(|| {
             std::hint::black_box(
-                decode_bytes(&s16_st, opts.clone())
+                decode_bytes(s16_st, opts.clone())
                     .expect("ryf decode")
                     .channels[0]
                     .len(),
@@ -148,14 +252,20 @@ fn benches(c: &mut Criterion) {
         });
     });
     decode.bench_function("hound/s16_stereo_mix_2s", |b| {
-        b.iter(|| std::hint::black_box(hound_s16_to_mixed_f32(&s16_st).len()));
+        b.iter(|| std::hint::black_box(hound_s16_to_mixed_f32(s16_st).len()));
+    });
+    decode.bench_function("symphonia/s16_stereo_mix_2s", |b| {
+        b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(s16_st).len()));
     });
     decode.throughput(Throughput::Bytes(f32_mono.len() as u64));
     decode.bench_function("ryf/f32_mono_2s", |b| {
-        b.iter(|| std::hint::black_box(ryf_decode_mono(&f32_mono)));
+        b.iter(|| std::hint::black_box(ryf_decode_mono(f32_mono)));
     });
     decode.bench_function("hound/f32_mono_2s", |b| {
-        b.iter(|| std::hint::black_box(hound_f32_mono(&f32_mono)));
+        b.iter(|| std::hint::black_box(hound_f32_mono(f32_mono)));
+    });
+    decode.bench_function("symphonia/f32_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(f32_mono)));
     });
     decode.finish();
 
@@ -185,7 +295,7 @@ fn benches(c: &mut Criterion) {
     stream.throughput(Throughput::Bytes(s16_mono.len() as u64));
     stream.bench_function("ryf/decode_streaming_s16_mono_2s", |b| {
         b.iter(|| {
-            let mut src = ryf::ByteSource::from_slice(&s16_mono);
+            let mut src = ryf::ByteSource::from_slice(s16_mono);
             let mut n = 0usize;
             ryf::decode_streaming(&mut src, &opts, |block| {
                 n += block.frames;
