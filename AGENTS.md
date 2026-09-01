@@ -2,18 +2,19 @@
 
 just wav.
 
-Pure-Rust WAVE family **reader**. One crate. No cloud. No Python.
+Pure-Rust WAVE family **codec**. One crate. No cloud. No Python.
 
 Input: WAVE bytes or a seekable file. Output: planar `f32` at the file's
 native sample rate.
 
 ## Aim
 
-**Pure Rust. Zero deps. SOTA WAVE reader as a tiny Unix library.**
+**Pure Rust. Zero deps. SOTA WAVE codec as a tiny Unix library.**
 
 - Default features (`adpcm` + `simd`) pull **no crates**.
 - No clap, tokio, anyhow, tracing, thiserror, hound, symphonia.
-- No encode in v1 (that stays in molv-wav until a later crate).
+- Encode is classic RIFF PCM16 mono + IEEE f32 (1–2 ch), harvested from
+  molv-wav. No RF64/ADPCM/RIFX write.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Slogan is **just wav**. Not a family prefix.
@@ -26,7 +27,9 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 ```
 
-Library: `decode_bytes` / `decode_with` / `probe_with` / `decode_streaming`.
+Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read_s16` /
+`read_f32` / `probe_with` / `decode_streaming` / `sniff_wav` / `encode_s16`
+/ `encode_f32` / `write_s16`.
 Caps: `DecodeOptions::speech()` (default) or `unbounded()`.
 
 ## Forbidden
@@ -34,7 +37,7 @@ Caps: `DecodeOptions::speech()` (default) or `unbounded()`.
 - Cloud APIs
 - Python / PyO3 / ffmpeg on the product path (ffmpeg is a **test oracle**)
 - Extra crates on the default feature set
-- Encoding WAVE
+- RF64 / ADPCM / RIFX encode
 - Shipping long PCM / listen dumps in git
   (tiny ADPCM vectors in `fixtures/` are allowed)
 

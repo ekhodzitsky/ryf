@@ -2,7 +2,8 @@
 
 just wav.
 
-Pure-Rust **WAVE family** reader. `std` only. No encode.
+Pure-Rust **WAVE family** codec. `std` only. Read the family; write classic
+RIFF PCM16 / IEEE f32.
 
 ## Support matrix
 
@@ -19,7 +20,7 @@ wild-file quirks (`valid_bits=0`, empty channel mask, short `data`, streaming
 
 ## Non-goals
 
-- Encoding / writing WAVE
+- RF64 / ADPCM / RIFX encode
 - GSM, MPEG-in-WAV, and other exotic codecs
 - Resampling
 - Async I/O
@@ -51,6 +52,9 @@ println!("{} Hz, {} frames", decoded.sample_rate, decoded.channels[0].len());
 - [`DecodeOptions::speech`] — 2 h, 192 kHz, 4 GiB planar f32 (default)
 - [`DecodeOptions::unbounded`] — archival; still caps RAM from a lying header
 - [`decode_streaming`] — ~256 KiB source blocks, peak RAM O(block)
+- [`encode_s16`] / [`encode_f32`] / [`write_s16`] — classic RIFF write (molv path)
+- [`decode_s16`] / [`read_s16`] — raw LE PCM16 mono bytes; [`decode_f32`] / [`read_f32`] — mono f32
+- [`sniff_wav`] — `&[u8]` container sniff (RIFF/RIFX/RF64/BW64/W64)
 
 Typed errors: [`WavError`] (no `anyhow`, no `thiserror`).
 
@@ -66,6 +70,7 @@ src/
   convert/     s16/f32/G.711 convert + SIMD
   pull/        O(block) pull-parser
   wav.rs       sniff / probe / decode
+  encode.rs    RIFF PCM16 / IEEE f32 write
   adpcm/       MS + IMA (feature)
 ```
 

@@ -48,6 +48,12 @@ impl DecodeOptions {
         Self::default()
     }
 
+    /// Alias of [`Self::speech`] — historical `gigastt-wav` name.
+    #[inline]
+    pub fn product_stt() -> Self {
+        Self::speech()
+    }
+
     /// No practical duration / rate ceiling (library / archival use).
     ///
     /// Still uses a finite decode-rate ceiling of 192 kHz when sizing the

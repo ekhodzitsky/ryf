@@ -12,6 +12,7 @@
 //! | RIFX (big-endian) | IEEE float 32 / 64 |
 //! | RF64 / BW64 (`ds64`) | G.711 A-law / µ-law |
 //! | Sony Wave64 | MS-ADPCM, IMA/DVI ADPCM (`adpcm` feature) |
+//! | Write: classic RIFF | PCM16 mono, IEEE f32 1–2 ch |
 //!
 //! Also: `WAVE_FORMAT_EXTENSIBLE` (PCM / float / G.711 + Ambisonic GUIDs),
 //! wild-file quirks (`valid_bits=0`, empty channel mask, short `data`,
@@ -19,7 +20,7 @@
 //!
 //! ## Non-goals
 //!
-//! - Encoding / writing WAVE
+//! - RF64 / ADPCM / RIFX **encode** (write path is classic RIFF PCM16 + IEEE f32)
 //! - GSM, MPEG-in-WAV, and other exotic codecs
 //! - Resampling
 //! - Async I/O (sync demux; call from `spawn_blocking` in async apps)
@@ -42,6 +43,7 @@
 #[cfg(feature = "adpcm")]
 mod adpcm;
 mod convert;
+mod encode;
 mod error;
 pub(crate) mod header;
 mod options;
@@ -50,16 +52,22 @@ mod scrub;
 pub mod source;
 mod wav;
 
+pub use convert::{f32_to_s16le, s16le_to_f32};
+pub use encode::{encode_f32, encode_s16, write_s16};
 pub use error::{Result, WavError};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,
     DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,
 };
+/// Historical `gigastt-wav` aliases of the `DEFAULT_*` caps.
+pub const MAX_DURATION_S: f64 = DEFAULT_MAX_DURATION_SECS;
+pub const MAX_SAMPLE_RATE: u32 = DEFAULT_MAX_SAMPLE_RATE;
+pub const MAX_DECODE_SAMPLE_RATE: u32 = DEFAULT_MAX_DECODE_SAMPLE_RATE;
 pub use source::ByteSource;
 pub use wav::{
     DecodedWav, ProbeCodec, StreamBlock, StreamInfo, WavProbe, convert_s16_le_to_f32,
-    convert_s16_mono_pub, decode, decode_bytes, decode_streaming, decode_with, probe, probe_with,
-    sniff_is_riff_wave,
+    convert_s16_mono_pub, decode, decode_bytes, decode_f32, decode_s16, decode_streaming,
+    decode_with, probe, probe_with, read_f32, read_s16, sniff_is_riff_wave, sniff_wav,
 };
 
 /// Whether decoded channels are mixed to mono or kept separate.

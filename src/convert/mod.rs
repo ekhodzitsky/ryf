@@ -334,6 +334,38 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
     }
 }
 
+/// Clip to [-1, 1] and pack little-endian i16 (`±1.0` → `±32767`).
+///
+/// Distinct from the decode kernel (`/ 32768`): this is the molv product
+/// pack used when writing PCM16 WAVE.
+#[must_use]
+pub fn f32_to_s16le(samples: &[f32]) -> Vec<u8> {
+    const S16_PEAK: f32 = 32_767.0;
+    let mut out = Vec::with_capacity(samples.len().saturating_mul(2));
+    for s in samples {
+        let v = s.clamp(-1.0, 1.0);
+        let i = (v * S16_PEAK).round() as i32;
+        let i = i.clamp(-32_767, 32_767) as i16;
+        out.extend_from_slice(&i.to_le_bytes());
+    }
+    out
+}
+
+/// Unpack little-endian i16 with the encode peak (`i16::MIN` maps slightly
+/// below -1). Odd length is [`crate::WavError::OddPcm`].
+pub fn s16le_to_f32(pcm: &[u8]) -> crate::Result<Vec<f32>> {
+    const S16_PEAK: f32 = 32_767.0;
+    if !pcm.len().is_multiple_of(2) {
+        return Err(crate::WavError::OddPcm);
+    }
+    let mut out = Vec::with_capacity(pcm.len() / 2);
+    for s in pcm.as_chunks::<2>().0 {
+        let v = i16::from_le_bytes(*s);
+        out.push(f32::from(v) / S16_PEAK);
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 #[path = "../convert_tests.rs"]
 mod convert_tests;

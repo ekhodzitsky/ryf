@@ -6,10 +6,10 @@ use std::io;
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, WavError>;
 
-/// Errors produced while sniffing, probing, or decoding WAVE family streams.
+/// Errors produced while sniffing, probing, decoding, or encoding WAVE.
 #[derive(Debug)]
 pub enum WavError {
-    /// Underlying `Read` / `Seek` failure.
+    /// Underlying `Read` / `Seek` / `Write` failure.
     Io(io::Error),
     /// Stream is not a supported WAVE container.
     NotWave,
@@ -25,6 +25,12 @@ pub enum WavError {
     StreamLengthUnknown,
     /// Optional crate feature is off for this codec path.
     FeatureDisabled { feature: &'static str },
+    /// PCM payload is not a whole number of frames (or s16 length is odd).
+    OddPcm,
+    /// WAVE `data` chunk decoded to zero samples.
+    Empty,
+    /// Encoded RIFF size does not fit in `u32`.
+    RiffTooLarge,
     /// Structural / header / chunk layout failure.
     Format(String),
 }
@@ -64,7 +70,11 @@ impl WavError {
     pub fn is_format_class(&self) -> bool {
         matches!(
             self,
-            Self::NotWave | Self::Format(_) | Self::StreamLengthUnknown
+            Self::NotWave
+                | Self::Format(_)
+                | Self::StreamLengthUnknown
+                | Self::OddPcm
+                | Self::Empty
         )
     }
 }
@@ -95,6 +105,9 @@ impl fmt::Display for WavError {
             Self::FeatureDisabled { feature } => {
                 write!(f, "wav: feature `{feature}` is not enabled in this build")
             }
+            Self::OddPcm => write!(f, "PCM length is not a whole number of frames"),
+            Self::Empty => write!(f, "WAVE data chunk is empty"),
+            Self::RiffTooLarge => write!(f, "WAVE payload does not fit in a RIFF u32"),
             Self::Format(msg) => write!(f, "{msg}"),
         }
     }

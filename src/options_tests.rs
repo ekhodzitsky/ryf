@@ -4,6 +4,7 @@ use crate::ChannelMode;
 #[test]
 fn builders_and_max_frames() {
     let d = DecodeOptions::speech();
+    assert_eq!(d, DecodeOptions::product_stt());
     assert_eq!(d.channel_mode, ChannelMode::Mono);
     assert_eq!(d.source_label_str(), "wav");
 

@@ -3,6 +3,7 @@
 //! See the crate-level docs for the support matrix and non-goals.
 
 use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
 
 use crate::ChannelMode;
 use crate::error::{Result, WavError};
@@ -63,6 +64,12 @@ pub fn sniff_is_riff_wave(mss: &mut ByteSource<'_>) -> Result<bool> {
 
     mss.seek(SeekFrom::Start(0))?;
     Ok(is_classic || is_w64)
+}
+
+/// Byte-slice sniff (syom/sluh). Same markers as [`sniff_is_riff_wave`].
+pub fn sniff_wav(data: &[u8]) -> bool {
+    let mut source = ByteSource::from_slice(data);
+    sniff_is_riff_wave(&mut source).unwrap_or(false)
 }
 
 /// Probe with speech-ingest default caps.
@@ -147,6 +154,72 @@ pub fn decode_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<Dec
         sample_rate,
         channels,
     })
+}
+
+/// Molv-compat: LE PCM16 **mono** `data` bytes, no f32 convert.
+///
+/// Stereo, RIFX, float, and other codecs are [`WavError::UnsupportedCodec`].
+/// Empty `data` is [`WavError::Empty`]. Odd byte length is [`WavError::OddPcm`].
+pub fn decode_s16(data: &[u8]) -> Result<(u32, Vec<u8>)> {
+    let mut src = ByteSource::from_slice(data);
+    let header = parse_header(&mut src)?;
+    if header.fmt.codec != SampleCodec::S16
+        || header.fmt.channels != 1
+        || header.fmt.big_endian
+        || header.fmt.sample_width != 2
+    {
+        return Err(WavError::UnsupportedCodec);
+    }
+    let available = src
+        .byte_len()
+        .ok_or(WavError::StreamLengthUnknown)?
+        .saturating_sub(header.data_pos);
+    let want = header.declared_data_len.unwrap_or(available).min(available);
+    if want == 0 {
+        return Err(WavError::Empty);
+    }
+    if !want.is_multiple_of(2) {
+        return Err(WavError::OddPcm);
+    }
+    let n = usize::try_from(want).map_err(|_| WavError::format("wav: data chunk too large"))?;
+    if let Some(rest) = src.remaining_slice() {
+        if rest.len() < n {
+            return Err(WavError::format("wav: short s16 data"));
+        }
+        return Ok((header.fmt.sample_rate, rest[..n].to_vec()));
+    }
+    let mut out = vec![0u8; n];
+    src.read_buf_exact(&mut out)
+        .map_err(|e| WavError::format(format!("wav: short s16 data: {e}")))?;
+    Ok((header.fmt.sample_rate, out))
+}
+
+/// Molv-compat: mono f32 at the file's native rate (stereo mixed).
+/// Empty PCM is [`WavError::Empty`]. No speech duration cap.
+pub fn decode_f32(data: &[u8]) -> Result<(u32, Vec<f32>)> {
+    let decoded = decode_bytes(
+        data,
+        DecodeOptions::unbounded().with_channel_mode(ChannelMode::Mono),
+    )?;
+    let mono = decoded
+        .channels
+        .into_iter()
+        .next()
+        .ok_or_else(|| WavError::format("wav: missing mono plane"))?;
+    if mono.is_empty() {
+        return Err(WavError::Empty);
+    }
+    Ok((decoded.sample_rate, mono))
+}
+
+/// [`decode_s16`] from a filesystem path.
+pub fn read_s16(path: &Path) -> Result<(u32, Vec<u8>)> {
+    decode_s16(&std::fs::read(path)?)
+}
+
+/// [`decode_f32`] from a filesystem path.
+pub fn read_f32(path: &Path) -> Result<(u32, Vec<f32>)> {
+    decode_f32(&std::fs::read(path)?)
 }
 
 #[cfg(test)]

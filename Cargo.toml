@@ -1,11 +1,11 @@
 [package]
 name = "ryf"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 authors = ["Evgeny Khodzitsky"]
-description = "just wav. Pure-Rust WAVE family reader (RIFF/RIFX/RF64/BW64/Wave64)."
+description = "just wav. Pure-Rust WAVE family codec (RIFF/RIFX/RF64/BW64/Wave64 read; RIFF PCM16/f32 write)."
 readme = "README.md"
 keywords = ["wav", "riff", "audio", "pcm", "decoder"]
 categories = ["multimedia::audio"]

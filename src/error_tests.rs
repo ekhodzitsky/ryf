@@ -34,6 +34,15 @@ fn display_and_helpers_cover_all_variants() {
         WavError::FeatureDisabled { feature: "adpcm" }.to_string(),
         "wav: feature `adpcm` is not enabled in this build"
     );
+    assert_eq!(
+        WavError::OddPcm.to_string(),
+        "PCM length is not a whole number of frames"
+    );
+    assert_eq!(WavError::Empty.to_string(), "WAVE data chunk is empty");
+    assert_eq!(
+        WavError::RiffTooLarge.to_string(),
+        "WAVE payload does not fit in a RIFF u32"
+    );
 
     let io_err: WavError = io::Error::other("disk").into();
     assert!(io_err.to_string().contains("disk"));
@@ -43,6 +52,9 @@ fn display_and_helpers_cover_all_variants() {
     assert!(WavError::NotWave.is_format_class());
     assert!(WavError::format("x").is_format_class());
     assert!(WavError::StreamLengthUnknown.is_format_class());
+    assert!(WavError::OddPcm.is_format_class());
+    assert!(WavError::Empty.is_format_class());
+    assert!(!WavError::RiffTooLarge.is_format_class());
     assert!(!WavError::UnsupportedCodec.is_format_class());
     assert!(!WavError::sample_rate(1, 1).is_format_class());
     assert!(!WavError::output_too_large(1, 1).is_format_class());
