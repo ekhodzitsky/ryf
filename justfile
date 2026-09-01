@@ -11,4 +11,7 @@ clippy:
 cov:
     cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only -- --skip proptest
 
+bench:
+    cargo bench --bench wav
+
 check: fmt clippy test

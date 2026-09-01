@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-01
+
+### Added
+
+- Criterion benches vs hound 3.5 (`cargo bench --bench wav` / `just bench`):
+  decode PCM16 mono/stereo-mix and IEEE f32, encode PCM16/f32, on 2 s @
+  16 kHz in-memory RIFF. Numbers in the README.
+
 ## [0.1.4] - 2026-09-01
 
 ### Added

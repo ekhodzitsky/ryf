@@ -194,6 +194,35 @@ Empty bucket for higher layers.
 | `adpcm` | yes | MS + IMA/DVI ADPCM (`0x0002` / `0x0011`) |
 | `simd` | yes | NEON (aarch64) + SSE (x86) s16→f32, stereo mix/split, f32 copy. Bit-exact with the scalar kernels. |
 
+## Benchmarks
+
+In-process, same classic RIFF bytes, 2 s @ 16 kHz (the speech-ingest clip
+size — ~64–128 KiB, cache-hot). Decode is timed through to mixed planar
+`f32`. hound yields typed samples; the bench converts i16 with `/ 32768`
+and mixes stereo with the same sum / n as ryf.
+
+Apple Silicon (aarch64, NEON), rustc 1.88, `cargo bench --bench wav`
+(Criterion 0.8, 40 samples, 3 s). Median.
+
+| Workload | ryf | hound 3.5 | ryf is |
+|---|---|---|---|
+| decode PCM16 mono → f32 | 3.31 µs | 154 µs | **46×** |
+| decode PCM16 stereo mix → f32 | 7.81 µs | 362 µs | **46×** |
+| decode IEEE f32 mono | 3.99 µs | 170 µs | **43×** |
+| encode PCM16 mono (from i16) | 18.1 µs | 95.8 µs | **5.3×** |
+| encode IEEE f32 mono | 22.5 µs | 44.4 µs | **2.0×** |
+
+`decode_streaming` on the same s16 mono clip is 5.03 µs (same kernels, no
+full-file planar alloc).
+
+Not in this table: **ffmpeg** (subprocess + demuxer — correctness oracle,
+not a speed peer) and **symphonia** (multi-format pipeline).
+
+```sh
+just bench
+# or: cargo bench --bench wav
+```
+
 ## Correctness
 
 - Differential suite vs **ffmpeg** (bit-exact `f32` on lossless PCM / G.711)
@@ -206,6 +235,7 @@ Empty bucket for higher layers.
 cargo test
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
+cargo bench --bench wav
 ```
 
 ## Non-goals
