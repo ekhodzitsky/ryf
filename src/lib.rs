@@ -23,14 +23,20 @@ pub use options::{
     DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,
 };
 /// Historical `gigastt-wav` aliases of the `DEFAULT_*` caps.
+#[deprecated(since = "0.2.0", note = "use DEFAULT_MAX_DURATION_SECS")]
 pub const MAX_DURATION_S: f64 = DEFAULT_MAX_DURATION_SECS;
+#[deprecated(since = "0.2.0", note = "use DEFAULT_MAX_SAMPLE_RATE")]
 pub const MAX_SAMPLE_RATE: u32 = DEFAULT_MAX_SAMPLE_RATE;
+#[deprecated(since = "0.2.0", note = "use DEFAULT_MAX_DECODE_SAMPLE_RATE")]
 pub const MAX_DECODE_SAMPLE_RATE: u32 = DEFAULT_MAX_DECODE_SAMPLE_RATE;
 pub use source::ByteSource;
+#[deprecated(since = "0.2.0", note = "use convert_s16_le_to_f32")]
+#[allow(deprecated)]
+pub use wav::convert_s16_mono_pub;
 pub use wav::{
-    DecodedWav, ProbeCodec, StreamBlock, StreamInfo, WavProbe, convert_s16_le_to_f32,
-    convert_s16_mono_pub, decode, decode_bytes, decode_f32, decode_s16, decode_streaming,
-    decode_with, probe, probe_with, read_f32, read_s16, sniff_is_riff_wave, sniff_wav,
+    DecodedWav, ProbeCodec, StreamBlock, StreamInfo, WavProbe, convert_s16_le_to_f32, decode,
+    decode_bytes, decode_f32, decode_s16, decode_streaming, decode_with, probe, probe_with, read,
+    read_f32, read_s16, read_with, sniff_is_riff_wave, sniff_wav,
 };
 
 /// How decoded channels are laid out in [`DecodedWav::channels`] /

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-01
+
+### Added
+
+- `read` / `read_with`: path → planar `f32` (`speech()` caps, or explicit
+  `DecodeOptions`). `DecodedWav::num_channels` / `frames`.
+- Dual license MIT OR Apache-2.0 (`LICENSE` + `LICENSE-APACHE`).
+- `examples/decode.rs`, `examples/encode.rs`.
+- CI test matrix: Ubuntu, macOS, Windows (ffmpeg oracle on Ubuntu).
+- Crate metadata: `repository`, `homepage`, `documentation`.
+
+### Deprecated
+
+- Harvest aliases: `DecodeOptions::product_stt`, `MAX_DURATION_S` /
+  `MAX_SAMPLE_RATE` / `MAX_DECODE_SAMPLE_RATE`, `convert_s16_mono_pub`.
+  Use `speech()`, `DEFAULT_*`, `convert_s16_le_to_f32`.
+
 ## [0.1.6] - 2026-09-01
 
 ### Added

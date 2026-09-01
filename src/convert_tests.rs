@@ -2,6 +2,7 @@ use super::*;
 use crate::header::SampleCodec;
 
 #[test]
+#[allow(deprecated)]
 fn convert_s16_public_aliases_and_odd_lengths() {
     // Length not multiple of 8 exercises scalar tail (and NEON tail on aarch64).
     let samples: [i16; 11] = [0, 1, -1, 1000, -1000, i16::MAX, i16::MIN, 42, -42, 7, -7];

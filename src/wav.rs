@@ -12,7 +12,9 @@ use crate::options::DecodeOptions;
 use crate::pull::{decode_collect, ensure_adpcm_enabled, open_decode};
 use crate::source::ByteSource;
 
-pub use crate::convert::{convert_s16_le_to_f32, convert_s16_mono_pub};
+pub use crate::convert::convert_s16_le_to_f32;
+#[allow(deprecated)]
+pub use crate::convert::convert_s16_mono_pub;
 pub use crate::header::ProbeCodec;
 pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 
@@ -26,6 +28,20 @@ pub struct DecodedWav {
     pub sample_rate: u32,
     /// Planar `f32`. Length 1 if mixed; otherwise one vec per channel.
     pub channels: Vec<Vec<f32>>,
+}
+
+impl DecodedWav {
+    /// Number of output planes (`1` if mixed).
+    #[must_use]
+    pub fn num_channels(&self) -> usize {
+        self.channels.len()
+    }
+
+    /// Frames in the first plane (all planes are equal length).
+    #[must_use]
+    pub fn frames(&self) -> usize {
+        self.channels.first().map_or(0, Vec::len)
+    }
 }
 
 /// Lightweight header probe without decoding PCM.
@@ -217,6 +233,19 @@ pub fn decode_f32(data: &[u8]) -> Result<(u32, Vec<f32>)> {
         return Err(WavError::Empty);
     }
     Ok((decoded.sample_rate, mono))
+}
+
+/// Read a WAVE file to planar `f32` (speech caps, mixed mono).
+///
+/// `let wav = ryf::read("speech.wav")?;`
+pub fn read(path: impl AsRef<Path>) -> Result<DecodedWav> {
+    read_with(path, &DecodeOptions::speech())
+}
+
+/// [`read`] with explicit [`DecodeOptions`].
+pub fn read_with(path: impl AsRef<Path>, opts: &DecodeOptions) -> Result<DecodedWav> {
+    let file = std::fs::File::open(path)?;
+    decode_with(&mut ByteSource::from_file(file), opts)
 }
 
 /// [`decode_s16`] from a filesystem path.

@@ -34,10 +34,10 @@ cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only --
 cargo bench --bench wav
 ```
 
-Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read_s16` /
-`read_f32` / `probe_with` / `decode_streaming` / `sniff_wav` / `encode` /
-`encode_s16` / `encode_f32` / `write` / `write_s16` / `write_f32` /
-`WavWriter`.
+Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read` /
+`read_with` / `read_s16` / `read_f32` / `probe_with` / `decode_streaming` /
+`sniff_wav` / `encode` / `encode_s16` / `encode_f32` / `write` /
+`write_s16` / `write_f32` / `WavWriter`.
 Caps: `DecodeOptions::speech()` (default) or `unbounded()`.
 
 ## Forbidden

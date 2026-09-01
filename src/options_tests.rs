@@ -2,6 +2,7 @@ use super::*;
 use crate::ChannelMode;
 
 #[test]
+#[allow(deprecated)]
 fn builders_and_max_frames() {
     let d = DecodeOptions::speech();
     assert_eq!(d, DecodeOptions::product_stt());

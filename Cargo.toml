@@ -1,12 +1,15 @@
 [package]
 name = "ryf"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 authors = ["Evgeny Khodzitsky"]
 description = "just wav. Pure-Rust WAVE family codec (RIFF/RIFX/RF64/BW64/Wave64 read; RIFF PCM 8/16/24/32 + f32 write)."
 readme = "README.md"
+repository = "https://github.com/ekhodzitsky/ryf"
+homepage = "https://github.com/ekhodzitsky/ryf"
+documentation = "https://docs.rs/ryf"
 keywords = ["wav", "riff", "audio", "pcm", "codec"]
 categories = ["multimedia::audio"]
 publish = false

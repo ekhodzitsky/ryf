@@ -22,6 +22,7 @@ pub fn convert_s16_le_to_f32(src: &[u8], dst: &mut [f32]) {
 
 /// Deprecated alias — use [`convert_s16_le_to_f32`].
 #[doc(hidden)]
+#[deprecated(since = "0.2.0", note = "use convert_s16_le_to_f32")]
 #[inline]
 pub fn convert_s16_mono_pub(src: &[u8], dst: &mut [f32]) {
     convert_s16_le_to_f32(src, dst);

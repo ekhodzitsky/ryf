@@ -50,6 +50,7 @@ impl DecodeOptions {
     }
 
     /// Alias of [`Self::speech`] — historical `gigastt-wav` name.
+    #[deprecated(since = "0.2.0", note = "use DecodeOptions::speech")]
     #[inline]
     pub fn product_stt() -> Self {
         Self::speech()

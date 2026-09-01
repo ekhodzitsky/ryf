@@ -7,7 +7,7 @@ Read RIFF / RIFX / RF64 / BW64 / Sony Wave64. Write classic RIFF PCM
 8/16/24/32 and IEEE f32. Output is planar `f32` at the file's native sample
 rate.
 
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![rustc](https://img.shields.io/badge/rustc-1.88+-lightgrey.svg)](Cargo.toml)
 [![deps](https://img.shields.io/badge/deps-zero-success.svg)](Cargo.toml)
 [![changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-blue.svg)](CHANGELOG.md)
@@ -36,23 +36,40 @@ dependencies.
 
 ## Install
 
-Private git. Default features (`adpcm` + `simd`) pull **no crates**.
-
 ```toml
 [dependencies]
-ryf = { git = "ssh://git@github.com/ekhodzitsky/ryf.git" }
+ryf = "0.2"
 ```
+
+Default features (`adpcm` + `simd`) pull **no crates**.
 
 ```toml
 # PCM/IEEE/G.711 only (no ADPCM, no SIMD)
-ryf = { git = "ssh://git@github.com/ekhodzitsky/ryf.git", default-features = false }
+ryf = { version = "0.2", default-features = false }
 ```
 
 Requires **Rust 1.88**, edition 2024.
 
 ## Quick start
 
-Decode a buffer to mixed mono `f32`:
+From a path, mixed mono `f32` at the file's native rate:
+
+```rust
+fn main() -> ryf::Result<()> {
+    let pcm = ryf::f32_to_s16le(&[0.25, -0.5, 0.0]);
+    let path = std::env::temp_dir().join(format!("ryf-readme-{}.wav", std::process::id()));
+    ryf::write_s16(&path, &pcm, 16_000)?;
+    let wav = ryf::read(&path)?;
+    assert_eq!(wav.sample_rate, 16_000);
+    assert_eq!(wav.num_channels(), 1);
+    assert_eq!(wav.frames(), 3);
+    let _ = std::fs::remove_file(&path);
+    Ok(())
+}
+```
+
+Caps and layout: `read_with(path, &DecodeOptions::speech().with_channel_mode(ChannelMode::Split))`.
+From a buffer:
 
 ```rust
 fn main() -> ryf::Result<()> {
@@ -102,8 +119,15 @@ fn main() -> ryf::Result<()> {
 }
 ```
 
-From a path: `read_s16` / `read_f32`. From a `File` or any `Read + Seek`:
+From a path: `read` / `read_with` (planar `f32`), `read_s16` / `read_f32`
+(molv drop-ins). From a `File` or any `Read + Seek`:
 `ByteSource::from_file` / `from_read_seek` + `decode_with`.
+
+```sh
+cargo run --example decode
+cargo run --example decode -- speech.wav
+cargo run --example encode -- out.wav
+```
 
 ## Read
 
@@ -161,7 +185,7 @@ Empty **decode** is still `WavError::Empty`. Empty **encode** is a valid WAVE
 
 `unbounded` still uses a finite rate when sizing the frame budget so a
 corrupt header cannot request petabytes from one multiply.
-`product_stt()` is an alias of `speech()`.
+`DecodeOptions::product_stt` is a deprecated alias of `speech()`.
 
 Streaming (`decode_streaming`) shares the convert kernels and keeps peak
 RAM at ~256 KiB of source PCM plus one planar block.
@@ -252,4 +276,9 @@ cargo bench --bench wav
 
 ## License
 
-[MIT](LICENSE) © Evgeny Khodzitsky
+Licensed under either of
+
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT license](LICENSE)
+
+at your option. © Evgeny Khodzitsky
