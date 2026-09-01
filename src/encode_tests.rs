@@ -1,4 +1,6 @@
-use super::{encode_f32, encode_s16, write_s16};
+use super::{
+    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_s16, write, write_f32, write_s16,
+};
 use crate::convert::f32_to_s16le;
 use crate::error::{Result, WavError};
 use crate::{ChannelMode, DecodeOptions, decode_bytes};
@@ -31,8 +33,12 @@ fn encode_f32_rejects_bad_channels_empty_odd_zero_rate() {
         Err(WavError::UnsupportedCodec)
     ));
     assert!(matches!(
-        encode_f32(&[0.1], 16_000, 3),
+        encode_f32(&[0.1], 16_000, 27),
         Err(WavError::UnsupportedCodec)
+    ));
+    assert!(matches!(
+        encode_f32(&[0.1], 16_000, 3),
+        Err(WavError::OddPcm)
     ));
     assert!(encode_f32(&[], 16_000, 1).is_ok());
     assert!(matches!(
@@ -195,5 +201,151 @@ fn decode_f32_and_read_paths() -> Result<()> {
     assert_eq!(sr, 16_000);
     assert_eq!(f.len(), 2);
     let _ = std::fs::remove_file(&path);
+    Ok(())
+}
+
+#[test]
+fn encode_s16_stereo_and_write_spec() -> Result<()> {
+    let mut pcm = Vec::new();
+    for s in [1i16, -1, 2, -2] {
+        pcm.extend_from_slice(&s.to_le_bytes());
+    }
+    let wav = encode(WriteSpec::s16(16_000, 2), &pcm)?;
+    let decoded = decode_bytes(
+        &wav,
+        DecodeOptions::unbounded().with_channel_mode(ChannelMode::Split),
+    )?;
+    assert_eq!(decoded.channels.len(), 2);
+    assert_eq!(decoded.channels[0].len(), 2);
+    assert_eq!(WriteSpec::s16(16_000, 2).format, WriteFormat::S16);
+    assert_eq!(WriteFormat::S24.bits(), 24);
+    assert_eq!(WriteFormat::U8.bytes_per_sample(), 1);
+    let tri = encode_f32(&[0.1, 0.2, 0.3], 16_000, 3)?;
+    assert_eq!(
+        decode_bytes(
+            &tri,
+            DecodeOptions::unbounded().with_channel_mode(ChannelMode::Split)
+        )?
+        .channels
+        .len(),
+        3
+    );
+    Ok(())
+}
+
+#[test]
+fn encode_u8_s24_s32_roundtrip() -> Result<()> {
+    let u8p = [0u8, 128, 255];
+    let wav = encode(WriteSpec::u8(8_000, 1), &u8p)?;
+    let (sr, mono) = crate::decode_f32(&wav)?;
+    assert_eq!(sr, 8_000);
+    assert_eq!(mono.len(), 3);
+
+    let s24 = [0u8, 0, 0, 0x00, 0x00, 0x80]; // 0, min
+    let wav = encode(WriteSpec::s24(16_000, 1), &s24)?;
+    let (_, mono) = crate::decode_f32(&wav)?;
+    assert_eq!(mono.len(), 2);
+
+    let mut s32 = Vec::new();
+    for v in [0i32, -1, i32::MAX] {
+        s32.extend_from_slice(&v.to_le_bytes());
+    }
+    let wav = encode(WriteSpec::s32(16_000, 1), &s32)?;
+    let (_, mono) = crate::decode_f32(&wav)?;
+    assert_eq!(mono.len(), 3);
+    Ok(())
+}
+
+#[test]
+fn write_f32_file_roundtrip() -> Result<()> {
+    let path = std::env::temp_dir().join(format!("ryf-enc-f32-{}.wav", std::process::id()));
+    let samples = [0.0f32, 0.5, -0.25, 1.0];
+    write_f32(&path, &samples, 24_000, 2)?;
+    let bytes = std::fs::read(&path)?;
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(bytes, encode_f32(&samples, 24_000, 2)?);
+    assert_eq!(u16::from_le_bytes([bytes[22], bytes[23]]), 2);
+    let mut src = crate::ByteSource::from_slice(&bytes);
+    let decoded = crate::decode(&mut src, ChannelMode::Split, "write_f32")?;
+    assert_eq!(decoded.channels.len(), 2);
+    assert_eq!(decoded.channels[0].len(), 2);
+    Ok(())
+}
+
+#[test]
+fn encode_rejects_bad_spec_and_odd_frames() {
+    assert!(matches!(
+        encode(WriteSpec::s16(0, 1), &[0, 1]),
+        Err(WavError::UnsupportedSampleRate { rate: 0, .. })
+    ));
+    assert!(matches!(
+        encode(WriteSpec::s16(16_000, 0), &[]),
+        Err(WavError::UnsupportedCodec)
+    ));
+    assert!(matches!(
+        encode(WriteSpec::s16(16_000, 27), &[]),
+        Err(WavError::UnsupportedCodec)
+    ));
+    assert!(matches!(
+        encode(WriteSpec::s16(16_000, 2), &[0, 1]),
+        Err(WavError::OddPcm)
+    ));
+    assert!(encode(WriteSpec::s16(16_000, 2), &[]).is_ok());
+}
+
+#[test]
+fn wav_writer_chunks_finalize_and_drop() -> Result<()> {
+    use std::io::Cursor;
+
+    let pcm = f32_to_s16le(&[0.1, 0.2, 0.3, 0.4]);
+    let spec = WriteSpec::s16(16_000, 1);
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new(&mut cur, spec)?;
+        w.write_pcm(&pcm[..4])?;
+        w.write_pcm(&pcm[4..])?;
+        assert_eq!(w.data_bytes(), pcm.len() as u64);
+        w.finalize()?;
+        w.finalize()?;
+        assert!(w.write_pcm(&pcm).is_err());
+    }
+    let wav = cur.into_inner();
+    assert_eq!(wav, encode_s16(&pcm, 16_000)?);
+
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new(&mut cur, spec)?;
+        w.write_pcm(&pcm)?;
+    } // drop patches
+    let wav = cur.into_inner();
+    assert_eq!(wav, encode_s16(&pcm, 16_000)?);
+
+    let mut w = WavWriter::new(Cursor::new(Vec::new()), WriteSpec::s16(16_000, 1))?;
+    assert!(matches!(w.write_pcm(&[0]), Err(WavError::OddPcm)));
+    assert!(matches!(
+        w.write_f32_samples(&[0.1]),
+        Err(WavError::UnsupportedCodec)
+    ));
+
+    let samples = [0.25f32, -0.5];
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new(&mut cur, WriteSpec::f32(12_000, 1))?;
+        w.write_f32_samples(&samples)?;
+        w.finalize()?;
+    }
+    let wav = cur.into_inner();
+    assert_eq!(wav, encode_f32(&samples, 12_000, 1)?);
+    Ok(())
+}
+
+#[test]
+fn write_generic_matches_encode() -> Result<()> {
+    let path = std::env::temp_dir().join(format!("ryf-enc-g-{}.wav", std::process::id()));
+    let pcm = f32_to_s16le(&[0.1]);
+    write(&path, WriteSpec::s16(8_000, 1), &pcm)?;
+    let bytes = std::fs::read(&path)?;
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(bytes, encode(WriteSpec::s16(8_000, 1), &pcm)?);
     Ok(())
 }

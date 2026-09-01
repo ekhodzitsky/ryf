@@ -13,8 +13,9 @@ native sample rate.
 
 - Default features (`adpcm` + `simd`) pull **no crates**.
 - No clap, tokio, anyhow, tracing, thiserror, hound, symphonia.
-- Encode is classic RIFF PCM16 mono + IEEE f32 (1–2 ch), harvested from
-  molv-wav. No RF64/ADPCM/RIFX write.
+- Encode is classic RIFF: PCM U8/S16/S24/S32 + IEEE f32, 1–26 ch, plus
+  molv drop-in `encode_s16` (mono) / `encode_f32` / `write_s16`. Streaming
+  `WavWriter`. No RF64/ADPCM/RIFX write.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Slogan is **just wav**. Not a family prefix.
@@ -31,8 +32,9 @@ cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only --
 ```
 
 Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read_s16` /
-`read_f32` / `probe_with` / `decode_streaming` / `sniff_wav` / `encode_s16`
-/ `encode_f32` / `write_s16`.
+`read_f32` / `probe_with` / `decode_streaming` / `sniff_wav` / `encode` /
+`encode_s16` / `encode_f32` / `write` / `write_s16` / `write_f32` /
+`WavWriter`.
 Caps: `DecodeOptions::speech()` (default) or `unbounded()`.
 
 ## Forbidden

@@ -3,8 +3,9 @@
 just wav.
 
 Pure-Rust **WAVE family** codec. Zero crates on the default feature set.
-Read RIFF / RIFX / RF64 / BW64 / Sony Wave64. Write classic RIFF PCM16 and
-IEEE f32. Output is planar `f32` at the file's native sample rate.
+Read RIFF / RIFX / RF64 / BW64 / Sony Wave64. Write classic RIFF PCM
+8/16/24/32 and IEEE f32. Output is planar `f32` at the file's native sample
+rate.
 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![rustc](https://img.shields.io/badge/rustc-1.88+-lightgrey.svg)](Cargo.toml)
@@ -27,7 +28,7 @@ dependencies.
 | IEEE f64 | yes | no | yes |
 | G.711 A-law / µ-law | yes | no | yes |
 | MS + IMA ADPCM | yes (`adpcm`) | no | limited |
-| Write | RIFF PCM16 mono, f32 1–2 ch | PCM/IEEE, many depths | no |
+| Write | RIFF PCM 8/16/24/32 + f32, 1–26 ch | PCM/IEEE, many depths | no |
 | Default deps | **none** | none | several |
 | Output | planar `f32`, native rate | typed sample iterator | decoded packets |
 | Duration / RAM caps | yes (`speech` / `unbounded`) | no | no |
@@ -126,14 +127,17 @@ Also:
 ## Write
 
 Classic little-endian RIFF only. No RF64, no RIFX, no ADPCM encode.
+Channels `1..=26` (same ceiling as decode). Empty payload is a valid header.
 
-| | Channels | Empty payload |
-|---|---|---|
-| `encode_s16` / `write_s16` — LE PCM16 | 1 | allowed |
-| `encode_f32` — IEEE f32 | 1–2 | allowed |
+| | Notes |
+|---|---|
+| `encode` / `write` + `WriteSpec` | U8, S16, packed S24, S32, IEEE f32 |
+| `encode_s16` / `write_s16` | molv drop-in, PCM16 **mono** |
+| `encode_f32` / `write_f32` | interleaved f32 |
+| `WavWriter` | streaming; sizes patched on `finalize` or drop |
 
-Empty **decode** is still `WavError::Empty`. Empty **encode** is a valid
-44-byte (PCM16) or 58-byte (f32) WAVE.
+Empty **decode** is still `WavError::Empty`. Empty **encode** is a valid WAVE
+(44-byte integer PCM header, 58-byte f32 header).
 
 ## Output
 

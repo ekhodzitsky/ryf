@@ -14,7 +14,9 @@ pub mod source;
 mod wav;
 
 pub use convert::{f32_to_s16le, s16le_to_f32};
-pub use encode::{encode_f32, encode_s16, write_s16};
+pub use encode::{
+    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_s16, write, write_f32, write_s16,
+};
 pub use error::{Result, WavError};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,

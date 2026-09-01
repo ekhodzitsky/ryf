@@ -93,8 +93,7 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
         ensure_adpcm_enabled()?;
     }
     let declared_frames = if let Some(sc) = header.declared_sample_count {
-        let ch = header.fmt.channels as u64;
-        Some(if ch > 0 && sc % ch == 0 { sc / ch } else { sc })
+        Some(sc)
     } else if header.fmt.codec.is_adpcm() {
         let (ba, spb) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
             (Some(p), _) => (p.block_align as u64, p.samples_per_block as u64),

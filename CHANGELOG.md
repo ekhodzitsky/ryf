@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-01
+
+### Added
+
+- Classic RIFF write of integer PCM U8 / S16 / packed S24 / S32 and IEEE f32
+  at 1–26 channels: `WriteSpec` / `WriteFormat`, `encode` / `write`,
+  `write_f32`. `encode_s16` / `write_s16` stay molv mono drop-ins.
+- `WavWriter`: streaming RIFF writer; sizes patched on `finalize` or drop.
+- GitHub Actions: `fmt`, `clippy -D warnings`, `test`, impl-only llvm-cov
+  ≥ 90%.
+
+### Changed
+
+- `encode_f32` accepts 1..=26 channels (was 1..=2).
+- `fact` / ds64 `sampleCount` is samples per channel. The old “divide when
+  divisible by nChannels” heuristic truncated even-length stereo IEEE.
+
 ## [0.1.3] - 2026-09-01
 
 ### Changed

@@ -55,14 +55,6 @@ fn reject_too_many_frames(
     Ok(())
 }
 
-fn sample_count_to_frames(sample_count: u64, channels: usize) -> u64 {
-    if channels > 0 && sample_count.is_multiple_of(channels as u64) {
-        sample_count / channels as u64
-    } else {
-        sample_count
-    }
-}
-
 fn reject_output_too_large(n_out: usize, frames: usize, max_bytes: u64) -> Result<()> {
     let bytes = (n_out as u64)
         .saturating_mul(frames as u64)
@@ -165,7 +157,8 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
         // *larger* count is ignored — TooLong is about bytes on disk, not
         // a header that claims three hours of a 10 s file.
         let frames = match header.declared_sample_count {
-            Some(sc) => actual_frames.min(sample_count_to_frames(sc, channels)),
+            // `fact` / ds64 sampleCount is samples per channel, not interleaved.
+            Some(sc) => actual_frames.min(sc),
             None => actual_frames,
         };
         reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
