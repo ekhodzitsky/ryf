@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+.DS_Store
+.idea/
+.vscode/
+*.swp
+coverage/
+lcov.info
+default.profraw
+
+# Listen dumps / generated audio. Codec vectors in fixtures/ are kept.
+/*.wav
+/*.pcm
+/out.wav

@@ -1,0 +1,30 @@
+[package]
+name = "ryf"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+authors = ["Evgeny Khodzitsky"]
+description = "just wav. Pure-Rust WAVE family reader (RIFF/RIFX/RF64/BW64/Wave64)."
+readme = "README.md"
+keywords = ["wav", "riff", "audio", "pcm", "decoder"]
+categories = ["multimedia::audio"]
+publish = false
+
+[features]
+default = ["adpcm", "simd"]
+# Microsoft + IMA/DVI ADPCM (0x0002 / 0x0011).
+adpcm = []
+# NEON (aarch64) + SSE4.1/SSE2 (x86) s16→f32 convert kernels.
+simd = []
+
+[dependencies]
+# Intentionally empty — pure std.
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
