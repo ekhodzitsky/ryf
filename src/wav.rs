@@ -161,8 +161,11 @@ pub fn decode_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<Dec
 /// Stereo, RIFX, float, and other codecs are [`WavError::UnsupportedCodec`].
 /// Empty `data` is [`WavError::Empty`]. Odd byte length is [`WavError::OddPcm`].
 pub fn decode_s16(data: &[u8]) -> Result<(u32, Vec<u8>)> {
-    let mut src = ByteSource::from_slice(data);
-    let header = parse_header(&mut src)?;
+    decode_s16_from(&mut ByteSource::from_slice(data))
+}
+
+fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
+    let header = parse_header(src)?;
     if header.fmt.codec != SampleCodec::S16
         || header.fmt.channels != 1
         || header.fmt.big_endian
@@ -214,7 +217,8 @@ pub fn decode_f32(data: &[u8]) -> Result<(u32, Vec<f32>)> {
 
 /// [`decode_s16`] from a filesystem path.
 pub fn read_s16(path: &Path) -> Result<(u32, Vec<u8>)> {
-    decode_s16(&std::fs::read(path)?)
+    let file = std::fs::File::open(path)?;
+    decode_s16_from(&mut ByteSource::from_file(file))
 }
 
 /// [`decode_f32`] from a filesystem path.

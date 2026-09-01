@@ -128,6 +128,23 @@ fn sniff_wav_slice_and_garbage() -> Result<()> {
     assert!(crate::sniff_wav(&wav));
     assert!(!crate::sniff_wav(b"not a wave"));
     assert!(!crate::sniff_wav(&[]));
+
+    struct Boom;
+    impl std::io::Read for Boom {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("boom"))
+        }
+    }
+    impl std::io::Seek for Boom {
+        fn seek(&mut self, _: std::io::SeekFrom) -> std::io::Result<u64> {
+            Ok(0)
+        }
+    }
+    let mut src = crate::ByteSource::from_read_seek(Boom, Some(40));
+    assert!(matches!(
+        crate::sniff_is_riff_wave(&mut src),
+        Err(WavError::Io(_))
+    ));
     Ok(())
 }
 
@@ -147,6 +164,10 @@ fn decode_s16_roundtrip_and_rejects() -> Result<()> {
         crate::decode_s16(&f),
         Err(WavError::UnsupportedCodec)
     ));
+
+    let mut odd = wav;
+    odd[40..44].copy_from_slice(&1u32.to_le_bytes());
+    assert!(matches!(crate::decode_s16(&odd), Err(WavError::OddPcm)));
     Ok(())
 }
 

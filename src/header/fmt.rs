@@ -157,68 +157,65 @@ pub(super) fn parse_fmt_chunk(
                 return Err(WavError::format("wav: ADPCM block_align is zero"));
             }
             let extra_size = u64::from(read_u16_endian(mss, big_endian)?);
-            match format {
-                WAVE_FORMAT_ADPCM_MS => {
-                    // samplesPerBlock (2) + numCoefs (2) + coefs (4 * n)
-                    if extra_size < 32 {
-                        return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
-                    }
-                    let samples_per_block = read_u16_endian(mss, big_endian)?;
-                    let num_coefs = read_u16_endian(mss, big_endian)?;
-                    if num_coefs == 0 || num_coefs > 256 {
-                        return Err(WavError::format("wav: MS-ADPCM invalid coefficient count"));
-                    }
-                    let coef_bytes = u64::from(num_coefs) * 4;
-                    if extra_size < 4 + coef_bytes {
-                        return Err(WavError::format(
-                            "wav: MS-ADPCM coefficient table truncated",
-                        ));
-                    }
-                    let mut coefs = Vec::with_capacity(num_coefs as usize);
-                    for _ in 0..num_coefs {
-                        let c1 = read_u16_endian(mss, big_endian)? as i16;
-                        let c2 = read_u16_endian(mss, big_endian)? as i16;
-                        coefs.push((c1, c2));
-                    }
-                    let rest = extra_size - 4 - coef_bytes;
-                    if rest > 0 {
-                        mss.ignore_bytes(rest)?;
-                    }
-                    Ok(FmtFields {
-                        codec: SampleCodec::MsAdpcm,
-                        channels,
-                        sample_rate,
-                        sample_width: 1, // unused for ADPCM; blocks drive layout
-                        adpcm_ms: Some(MsAdpcmParams {
-                            block_align,
-                            samples_per_block,
-                            channels,
-                            coefs,
-                        }),
-                        adpcm_ima: None,
-                        big_endian: false,
-                    })
+            if format == WAVE_FORMAT_ADPCM_MS {
+                // samplesPerBlock (2) + numCoefs (2) + coefs (4 * n)
+                if extra_size < 32 {
+                    return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
                 }
-                WAVE_FORMAT_ADPCM_IMA => {
-                    if extra_size != 2 {
-                        return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
-                    }
-                    let samples_per_block = read_u16_endian(mss, big_endian)?;
-                    Ok(FmtFields {
-                        codec: SampleCodec::ImaAdpcm,
-                        channels,
-                        sample_rate,
-                        sample_width: 1,
-                        adpcm_ms: None,
-                        adpcm_ima: Some(ImaAdpcmParams {
-                            block_align,
-                            samples_per_block,
-                            channels,
-                        }),
-                        big_endian: false,
-                    })
+                let samples_per_block = read_u16_endian(mss, big_endian)?;
+                let num_coefs = read_u16_endian(mss, big_endian)?;
+                if num_coefs == 0 || num_coefs > 256 {
+                    return Err(WavError::format("wav: MS-ADPCM invalid coefficient count"));
                 }
-                _ => unreachable!(),
+                let coef_bytes = u64::from(num_coefs) * 4;
+                if extra_size < 4 + coef_bytes {
+                    return Err(WavError::format(
+                        "wav: MS-ADPCM coefficient table truncated",
+                    ));
+                }
+                let mut coefs = Vec::with_capacity(num_coefs as usize);
+                for _ in 0..num_coefs {
+                    let c1 = read_u16_endian(mss, big_endian)? as i16;
+                    let c2 = read_u16_endian(mss, big_endian)? as i16;
+                    coefs.push((c1, c2));
+                }
+                let rest = extra_size - 4 - coef_bytes;
+                if rest > 0 {
+                    mss.ignore_bytes(rest)?;
+                }
+                Ok(FmtFields {
+                    codec: SampleCodec::MsAdpcm,
+                    channels,
+                    sample_rate,
+                    sample_width: 1, // unused for ADPCM; blocks drive layout
+                    adpcm_ms: Some(MsAdpcmParams {
+                        block_align,
+                        samples_per_block,
+                        channels,
+                        coefs,
+                    }),
+                    adpcm_ima: None,
+                    big_endian: false,
+                })
+            } else {
+                // WAVE_FORMAT_ADPCM_IMA — outer match is MS | IMA.
+                if extra_size != 2 {
+                    return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
+                }
+                let samples_per_block = read_u16_endian(mss, big_endian)?;
+                Ok(FmtFields {
+                    codec: SampleCodec::ImaAdpcm,
+                    channels,
+                    sample_rate,
+                    sample_width: 1,
+                    adpcm_ms: None,
+                    adpcm_ima: Some(ImaAdpcmParams {
+                        block_align,
+                        samples_per_block,
+                        channels,
+                    }),
+                    big_endian: false,
+                })
             }
         }
         WAVE_FORMAT_EXTENSIBLE => {

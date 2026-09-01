@@ -120,42 +120,13 @@ pub(super) fn collect_adpcm(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Resu
             .map(|_| Vec::with_capacity(plan.total_frames))
             .collect();
         visit_adpcm(mss, plan, |interleaved| {
-            append_i16_interleaved(interleaved, ch, plan.mode, &mut out);
+            let planes = crate::adpcm::i16_frames_to_f32(interleaved, ch, plan.mode);
+            for (dst, src) in out.iter_mut().zip(planes) {
+                dst.extend_from_slice(&src);
+            }
             Ok(())
         })?;
         Ok(out)
-    }
-}
-
-#[cfg(feature = "adpcm")]
-fn append_i16_interleaved(
-    interleaved: &[i16],
-    channels: usize,
-    mode: ChannelMode,
-    out: &mut [Vec<f32>],
-) {
-    let ch = channels.max(1);
-    match mode {
-        ChannelMode::Mono => {
-            let n_ch = ch as f32;
-            if ch == 1 {
-                for &s in interleaved {
-                    out[0].push(s as f32 / 32_768.0);
-                }
-            } else {
-                for frame in interleaved.chunks_exact(ch) {
-                    let sum: f32 = frame.iter().map(|&s| s as f32 / 32_768.0).sum();
-                    out[0].push(sum / n_ch);
-                }
-            }
-        }
-        ChannelMode::Split => {
-            for frame in interleaved.chunks_exact(ch) {
-                for (c, &s) in frame.iter().enumerate() {
-                    out[c].push(s as f32 / 32_768.0);
-                }
-            }
-        }
     }
 }
 
@@ -178,39 +149,12 @@ where
         let ch = plan.channels.max(1);
         let sample_rate = plan.sample_rate;
         let mode = plan.mode;
-        let mut mono = Vec::new();
-        let mut planar: Vec<Vec<f32>> = Vec::new();
         visit_adpcm(mss, plan, |interleaved| {
-            let frames_this = interleaved.len() / ch;
+            let planes = crate::adpcm::i16_frames_to_f32(interleaved, ch, mode);
             match mode {
-                ChannelMode::Mono => {
-                    mono.resize(frames_this, 0.0);
-                    let n_ch = ch as f32;
-                    if ch == 1 {
-                        for (i, &s) in interleaved.iter().enumerate() {
-                            mono[i] = s as f32 / 32_768.0;
-                        }
-                    } else {
-                        for (i, frame) in interleaved.chunks_exact(ch).enumerate() {
-                            let sum: f32 = frame.iter().map(|&s| s as f32 / 32_768.0).sum();
-                            mono[i] = sum / n_ch;
-                        }
-                    }
-                    emit_mono_block(sample_rate, &mono, on_block)?;
-                }
+                ChannelMode::Mono => emit_mono_block(sample_rate, &planes[0], on_block)?,
                 ChannelMode::Split => {
-                    if planar.len() != ch {
-                        planar = (0..ch).map(|_| Vec::new()).collect();
-                    }
-                    for p in &mut planar {
-                        p.resize(frames_this, 0.0);
-                    }
-                    for (i, frame) in interleaved.chunks_exact(ch).enumerate() {
-                        for (c, &s) in frame.iter().enumerate() {
-                            planar[c][i] = s as f32 / 32_768.0;
-                        }
-                    }
-                    emit_split_block(sample_rate, frames_this, &planar, on_block)?;
+                    emit_split_block(sample_rate, planes[0].len(), &planes, on_block)?;
                 }
             }
             Ok(())

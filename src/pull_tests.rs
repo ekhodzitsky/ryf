@@ -158,6 +158,9 @@ fn streaming_f32_and_adpcm_seeds() -> Result<()> {
     Ok(())
 }
 
+#[path = "pull_tests_cov.rs"]
+mod cov;
+
 fn riff_pcm(format_tag: u16, rate: u32, ch: u16, bits: u16, payload: &[u8]) -> Vec<u8> {
     let block_align = ch * (bits / 8);
     let byte_rate = rate * u32::from(block_align);

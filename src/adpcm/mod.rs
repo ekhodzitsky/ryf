@@ -238,7 +238,6 @@ fn decode_ms_block_stereo(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>
 }
 
 /// Convert interleaved i16 frames to mono f32 (mix) or per-channel split.
-#[allow(dead_code)] // available for external planar conversion helpers
 pub(crate) fn i16_frames_to_f32(
     interleaved: &[i16],
     channels: usize,

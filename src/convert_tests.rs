@@ -221,6 +221,81 @@ fn convert_sample_all_codecs_le_and_be() {
 }
 
 #[test]
+fn scalar_kernels_match_public_dispatch() {
+    // Force the scalar fallbacks even when SIMD dispatch is used on this host.
+    let samples: [i16; 11] = [0, 1, -1, 1000, -1000, i16::MAX, i16::MIN, 42, -42, 7, -7];
+    let mut src = Vec::new();
+    for s in samples {
+        src.extend_from_slice(&s.to_le_bytes());
+    }
+    let mut simd = vec![0.0f32; samples.len()];
+    let mut scalar = vec![0.0f32; samples.len()];
+    convert_s16_le_to_f32(&src, &mut simd);
+    super::scalar::convert_s16_mono_scalar(&src, &mut scalar);
+    for (i, (a, b)) in simd.iter().zip(scalar.iter()).enumerate() {
+        assert_eq!(a.to_bits(), b.to_bits(), "s16 scalar i={i}");
+    }
+
+    let mut stereo = Vec::new();
+    for s in samples {
+        stereo.extend_from_slice(&s.to_le_bytes());
+        stereo.extend_from_slice(&s.wrapping_neg().to_le_bytes());
+    }
+    let frames = samples.len();
+    let mut mix_s = vec![0.0f32; frames];
+    let mut mix_d = vec![0.0f32; frames];
+    mix_s16_le_to_f32(&stereo, &mut mix_d, 2);
+    super::scalar::mix_s16_stereo_scalar(&stereo, &mut mix_s);
+    for (i, (a, b)) in mix_d.iter().zip(mix_s.iter()).enumerate() {
+        assert_eq!(a.to_bits(), b.to_bits(), "mix scalar i={i}");
+    }
+    let mut l_s = vec![0.0f32; frames];
+    let mut r_s = vec![0.0f32; frames];
+    let mut l_d = vec![0.0f32; frames];
+    let mut r_d = vec![0.0f32; frames];
+    {
+        let mut planes: [&mut [f32]; 2] = [&mut l_d, &mut r_d];
+        split_s16_le_to_f32(&stereo, &mut planes);
+    }
+    super::scalar::split_s16_stereo_scalar(&stereo, &mut l_s, &mut r_s);
+    for i in 0..frames {
+        assert_eq!(l_d[i].to_bits(), l_s[i].to_bits(), "L i={i}");
+        assert_eq!(r_d[i].to_bits(), r_s[i].to_bits(), "R i={i}");
+    }
+
+    let vals = [0.0f32, 0.5, -0.25, 1.0, -1.0, 0.125, 0.25, 0.75];
+    let mut packed = Vec::new();
+    for v in vals {
+        packed.extend_from_slice(&v.to_le_bytes());
+    }
+    let mut f_s = vec![0.0f32; vals.len()];
+    let mut f_d = vec![0.0f32; vals.len()];
+    convert_f32_mono(&packed, &mut f_d);
+    super::scalar::convert_f32_mono_scalar(&packed, &mut f_s);
+    for (i, (a, b)) in f_d.iter().zip(f_s.iter()).enumerate() {
+        assert_eq!(a.to_bits(), b.to_bits(), "f32 scalar i={i}");
+    }
+
+    // 3-channel mix/split hits the n-ch scalar path (not stereo SIMD).
+    let mut tri = Vec::new();
+    for s in [1i16, 2, 3, 4, 5, 6] {
+        tri.extend_from_slice(&s.to_le_bytes());
+    }
+    let mut mix = vec![0.0f32; 2];
+    mix_s16_le_to_f32(&tri, &mut mix, 3);
+    super::scalar::mix_s16_nch_scalar(&tri, &mut mix, 3);
+    let mut a = vec![0.0f32; 2];
+    let mut b = vec![0.0f32; 2];
+    let mut c = vec![0.0f32; 2];
+    {
+        let mut planes: [&mut [f32]; 3] = [&mut a, &mut b, &mut c];
+        split_s16_le_to_f32(&tri, &mut planes);
+        super::scalar::split_s16_nch_scalar(&tri, &mut planes);
+    }
+    assert!((a[0] - 1.0 / 32768.0).abs() < 1e-9);
+}
+
+#[test]
 fn g711_tables_nonzero() {
     // Silence codes should map near zero; random high bit should flip sign.
     let a0 = alaw_to_linear(0xd5); // common A-law silence-ish after xor

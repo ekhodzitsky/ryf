@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-01
+
+### Fixed
+
+- ADPCM `fmt` parser uses an MS/IMA `if`/`else` instead of a nested match
+  with a dead catch-all (`unreachable!` in 0.1.1).
+
+### Changed
+
+- `read_s16` copies PCM16 from a file-backed `ByteSource` instead of
+  `fs::read` + slice decode (same bytes on disk).
+- ADPCM pull-stream reuses `i16_frames_to_f32` (same helper as collect).
+
 ## [0.1.1] - 2026-09-01
 
 ### Added

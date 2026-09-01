@@ -81,3 +81,57 @@ fn from_read_seek_and_new() -> Result<()> {
     assert_eq!(boxed.read_u8()?, 9);
     Ok(())
 }
+
+struct SeekFail {
+    data: Vec<u8>,
+    pos: usize,
+}
+
+impl Read for SeekFail {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos >= self.data.len() {
+            return Ok(0);
+        }
+        let n = (self.data.len() - self.pos).min(buf.len());
+        buf[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+impl Seek for SeekFail {
+    fn seek(&mut self, _: SeekFrom) -> std::io::Result<u64> {
+        Err(std::io::Error::other("seek disabled"))
+    }
+}
+
+struct EofRead;
+
+impl Read for EofRead {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        Ok(0)
+    }
+}
+
+impl Seek for EofRead {
+    fn seek(&mut self, _: SeekFrom) -> std::io::Result<u64> {
+        Ok(0)
+    }
+}
+
+#[test]
+fn ignore_bytes_seek_fail_falls_back_and_eof() -> Result<()> {
+    let mut s = ByteSource::from_read_seek(
+        SeekFail {
+            data: vec![1u8; 12_000],
+            pos: 0,
+        },
+        Some(12_000),
+    );
+    s.ignore_bytes(9_000)?;
+    assert_eq!(s.read_u8()?, 1);
+
+    let mut s = ByteSource::from_read_seek(EofRead, Some(100));
+    assert!(s.ignore_bytes(16).is_err());
+    Ok(())
+}
