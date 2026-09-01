@@ -26,7 +26,7 @@ cargo test
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 # impl-only line coverage (exclude sibling tests); target ≥ 90%
-cargo llvm-cov --lib --ignore-filename-regex '_tests\.rs$|wav_tests|wav_proptest' --summary-only -- --skip proptest
+cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only -- --skip proptest
 ```
 
 Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read_s16` /
