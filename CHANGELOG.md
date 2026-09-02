@@ -10,7 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - README is the crate pitch (≤100 lines). Read/write/API/benches/correctness
-  live under `docs/`.
+  live under `docs/`. First screen says **why ryf** (WAVE family in-process,
+  zero crates, no C, caps) versus hound / Symphonia / dr_wav / ffmpeg;
+  dr_wav write includes G.711; Speed names Apple Silicon and unmeasured
+  Linux x86.
 - Docs split: [docs/compare.md](docs/compare.md) lists WAVE crates;
   Criterion now times **wavers** 1.5 as well as hound and Symphonia.
 - Compare map covers C (dr_wav timed behind `bench-c`; libsndfile,
