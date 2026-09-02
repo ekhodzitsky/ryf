@@ -1,11 +1,11 @@
 [package]
 name = "ryf"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 authors = ["Evgeny Khodzitsky"]
-description = "just wav. Pure-Rust WAVE family ingest: RIFF/RIFX/RF64/BW64/Wave64, G.711, ADPCM → planar f32. Zero default deps."
+description = "Just wav. Pure-Rust WAVE family ingest: RIFF/RIFX/RF64/BW64/Wave64, G.711, ADPCM → planar f32. Zero default deps."
 readme = "README.md"
 repository = "https://github.com/ekhodzitsky/ryf"
 homepage = "https://github.com/ekhodzitsky/ryf"

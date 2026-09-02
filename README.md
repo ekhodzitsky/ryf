@@ -1,6 +1,6 @@
 # ryf
 
-just wav.
+Just wav.
 
 Untrusted or telephony **WAVE** → planar `f32` in-process. Zero crates on
 the default feature set, no C in the binary, no ffmpeg, no resample.
