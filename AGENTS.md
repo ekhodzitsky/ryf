@@ -12,9 +12,9 @@ native sample rate.
 **Pure Rust. Zero deps. SOTA WAVE codec as a tiny Unix library.**
 
 - Default features (`adpcm` + `simd`) pull **no crates**.
-- No clap, tokio, anyhow, tracing, thiserror, hound, symphonia on the
-  **product** path. `hound`, `symphonia`, and `criterion` are **dev-only**
-  bench competitors.
+- No clap, tokio, anyhow, tracing, thiserror, hound, symphonia, wavers on
+  the **product** path. `hound`, `symphonia`, `wavers`, and `criterion` are
+  **dev-only** bench competitors.
 - Encode is PCM U8/S16/S24/S32 + IEEE f32, 1–26 ch: classic RIFF when it
   fits, RF64 when it does not (`encode_rf64` / `WavWriter::new_rf64` to
   force). Molv drop-in `encode_s16` (mono) / `encode_f32` / `write_s16`.

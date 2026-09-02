@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README is the crate pitch (≤100 lines). Read/write/API/benches/correctness
   live under `docs/`.
+- Docs split: [docs/compare.md](docs/compare.md) lists WAVE crates;
+  Criterion now times **wavers** 1.5 as well as hound and Symphonia.
 
 ### Performance
 

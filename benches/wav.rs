@@ -1,12 +1,13 @@
-//! In-process WAVE decode/encode vs hound and Symphonia.
+//! In-process WAVE decode/encode vs hound, Symphonia, and wavers.
 //!
 //! Same classic RIFF bytes. Decode is measured through to mixed planar `f32`
 //! (the STT output). hound yields typed samples; the bench converts i16 with
 //! `/ 32768` and mixes stereo the same way ryf does (sum / n). Symphonia is
 //! probed as WAVE (`wav` + `pcm` features only) from a zero-copy slice.
+//! wavers reads `f32` from a `Cursor` (`Wav::new` + `read`).
 //!
 //! ffmpeg is a **correctness oracle**, not a speed peer (process spawn).
-//! Symphonia does not encode.
+//! Symphonia does not encode. wavers encode is path-only — not in this bench.
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;
@@ -170,6 +171,14 @@ fn leak(bytes: Vec<u8>) -> &'static [u8] {
     Box::leak(bytes.into_boxed_slice())
 }
 
+fn wavers_decode_mixed_f32(wav: &'static [u8]) -> Vec<f32> {
+    let mut w: wavers::Wav<f32> =
+        wavers::Wav::new(Box::new(Cursor::new(wav))).expect("wavers open");
+    let ch = usize::from(w.n_channels());
+    let samples = w.read().expect("wavers read");
+    mix_interleaved_f32(&samples, ch)
+}
+
 fn mix_interleaved_f32(samples: &[f32], ch: usize) -> Vec<f32> {
     if ch <= 1 {
         samples.to_vec()
@@ -260,6 +269,9 @@ fn benches(c: &mut Criterion) {
     decode.bench_function("symphonia/s16_mono_2s", |b| {
         b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(s16_mono)));
     });
+    decode.bench_function("wavers/s16_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(s16_mono)));
+    });
     decode.throughput(Throughput::Bytes(s16_st.len() as u64));
     decode.bench_function("ryf/s16_stereo_mix_2s", |b| {
         b.iter(|| {
@@ -277,6 +289,9 @@ fn benches(c: &mut Criterion) {
     decode.bench_function("symphonia/s16_stereo_mix_2s", |b| {
         b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(s16_st).len()));
     });
+    decode.bench_function("wavers/s16_stereo_mix_2s", |b| {
+        b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(s16_st).len()));
+    });
     decode.throughput(Throughput::Bytes(f32_mono.len() as u64));
     decode.bench_function("ryf/f32_mono_2s", |b| {
         b.iter(|| std::hint::black_box(ryf_decode_mono(f32_mono)));
@@ -286,6 +301,9 @@ fn benches(c: &mut Criterion) {
     });
     decode.bench_function("symphonia/f32_mono_2s", |b| {
         b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(f32_mono)));
+    });
+    decode.bench_function("wavers/f32_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(f32_mono)));
     });
     decode.finish();
 
