@@ -2,11 +2,15 @@
 
 use crate::header::SampleCodec;
 
+pub(crate) mod g711;
 mod scalar;
 #[cfg(all(feature = "simd", not(miri)))]
 mod simd;
 
-pub(crate) use scalar::{alaw_to_linear, mulaw_to_linear};
+pub(crate) use g711::{
+    convert_mono as convert_g711_mono, mix as mix_g711, split as split_g711,
+    table_for as g711_table,
+};
 #[allow(unused_imports)]
 use scalar::{
     convert_f32_mono_scalar, convert_s16_mono_scalar, mix_s16_nch_scalar, mix_s16_stereo_scalar,
@@ -329,8 +333,8 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
                 f64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]) as f32
             }
         }
-        SampleCodec::ALaw => alaw_to_linear(b[0]) as f32 / 32_768.0,
-        SampleCodec::MuLaw => mulaw_to_linear(b[0]) as f32 / 32_768.0,
+        SampleCodec::ALaw => g711::lut(&g711::ALAW_F32, b[0]),
+        SampleCodec::MuLaw => g711::lut(&g711::MULAW_F32, b[0]),
         SampleCodec::MsAdpcm | SampleCodec::ImaAdpcm | SampleCodec::Unsupported => 0.0,
     }
 }

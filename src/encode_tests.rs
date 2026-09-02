@@ -1,5 +1,6 @@
 use super::{
-    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_s16, write, write_f32, write_s16,
+    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_rf64, encode_s16, write,
+    write_f32, write_rf64, write_s16,
 };
 use crate::convert::f32_to_s16le;
 use crate::error::{Result, WavError};
@@ -347,5 +348,81 @@ fn write_generic_matches_encode() -> Result<()> {
     let bytes = std::fs::read(&path)?;
     let _ = std::fs::remove_file(&path);
     assert_eq!(bytes, encode(WriteSpec::s16(8_000, 1), &pcm)?);
+    Ok(())
+}
+
+#[test]
+fn encode_rf64_roundtrips_pcm_and_float() -> Result<()> {
+    let pcm = f32_to_s16le(&[0.1, -0.2, 0.0]);
+    let wav = encode_rf64(WriteSpec::s16(16_000, 1), &pcm)?;
+    assert_eq!(&wav[..4], b"RF64");
+    assert!(wav.windows(4).any(|w| w == b"ds64"));
+    assert_eq!(&wav[4..8], &u32::MAX.to_le_bytes());
+    let decoded = decode_bytes(
+        &wav,
+        DecodeOptions::unbounded().with_channel_mode(ChannelMode::Mono),
+    )?;
+    assert_eq!(decoded.sample_rate, 16_000);
+    assert_eq!(decoded.frames(), 3);
+
+    let samples = [0.0f32, 0.5, -0.25];
+    let f = encode_rf64(WriteSpec::f32(24_000, 1), &{
+        let mut b = Vec::new();
+        for s in samples {
+            b.extend_from_slice(&s.to_le_bytes());
+        }
+        b
+    })?;
+    assert_eq!(&f[..4], b"RF64");
+    let got = decode_bytes(
+        &f,
+        DecodeOptions::unbounded().with_channel_mode(ChannelMode::Mono),
+    )?;
+    assert_eq!(got.sample_rate, 24_000);
+    for (g, e) in got.channels[0].iter().zip(samples.iter()) {
+        assert_eq!(g.to_bits(), e.to_bits());
+    }
+
+    let path = std::env::temp_dir().join(format!("ryf-rf64-{}.wav", std::process::id()));
+    write_rf64(&path, WriteSpec::s16(8_000, 1), &pcm)?;
+    let on_disk = std::fs::read(&path)?;
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(on_disk, encode_rf64(WriteSpec::s16(8_000, 1), &pcm)?);
+
+    let small = encode_s16(&pcm, 16_000)?;
+    assert_eq!(&small[..4], b"RIFF");
+    Ok(())
+}
+
+#[test]
+fn wav_writer_rf64_matches_encode_rf64() -> Result<()> {
+    use std::io::Cursor;
+
+    let pcm = f32_to_s16le(&[0.25, -0.5]);
+    let spec = WriteSpec::s16(16_000, 1);
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new_rf64(&mut cur, spec)?;
+        w.write_pcm(&pcm)?;
+        w.finalize()?;
+    }
+    let wav = cur.into_inner();
+    assert_eq!(wav, encode_rf64(spec, &pcm)?);
+
+    let samples = [0.5f32, -0.25];
+    let mut pcm_f = Vec::new();
+    for s in samples {
+        pcm_f.extend_from_slice(&s.to_le_bytes());
+    }
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new_rf64(&mut cur, WriteSpec::f32(12_000, 1))?;
+        w.write_f32_samples(&samples)?;
+        w.finalize()?;
+    }
+    assert_eq!(
+        cur.into_inner(),
+        encode_rf64(WriteSpec::f32(12_000, 1), &pcm_f)?
+    );
     Ok(())
 }

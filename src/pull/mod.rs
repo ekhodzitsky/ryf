@@ -7,6 +7,7 @@ use crate::options::DecodeOptions;
 use crate::source::ByteSource;
 
 mod adpcm;
+mod g711;
 mod pcm;
 mod stream;
 

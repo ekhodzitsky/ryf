@@ -1,3 +1,4 @@
+use super::g711::{alaw_to_linear, mulaw_to_linear};
 use super::*;
 use crate::header::SampleCodec;
 
@@ -304,4 +305,35 @@ fn g711_tables_nonzero() {
     let _ = (a0, m0);
     assert_ne!(alaw_to_linear(0x00), alaw_to_linear(0x80));
     assert_ne!(mulaw_to_linear(0x00), mulaw_to_linear(0x80));
+}
+
+#[test]
+fn g711_lut_matches_expander_and_bulk() {
+    let mut src = [0u8; 256];
+    for (i, b) in src.iter_mut().enumerate() {
+        *b = i as u8;
+    }
+    let mut alaw = [0.0f32; 256];
+    let mut mulaw = [0.0f32; 256];
+    super::g711::convert_mono(&src, &mut alaw, super::g711_table(true));
+    super::g711::convert_mono(&src, &mut mulaw, super::g711_table(false));
+    for i in 0..256 {
+        let b = [i as u8];
+        assert_eq!(
+            alaw[i].to_bits(),
+            convert_sample(SampleCodec::ALaw, &b, false).to_bits()
+        );
+        assert_eq!(
+            mulaw[i].to_bits(),
+            convert_sample(SampleCodec::MuLaw, &b, false).to_bits()
+        );
+        assert_eq!(
+            alaw[i].to_bits(),
+            (alaw_to_linear(i as u8) as f32 / 32_768.0).to_bits()
+        );
+        assert_eq!(
+            mulaw[i].to_bits(),
+            (mulaw_to_linear(i as u8) as f32 / 32_768.0).to_bits()
+        );
+    }
 }

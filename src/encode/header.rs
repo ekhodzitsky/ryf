@@ -1,6 +1,6 @@
 //! Classic RIFF headers for integer PCM and IEEE f32.
 
-use super::WriteSpec;
+use super::{WriteFormat, WriteSpec};
 use crate::error::{Result, WavError};
 
 pub(super) const MAX_CHANNELS: u16 = 26;
@@ -61,19 +61,82 @@ pub(super) fn push_header(out: &mut Vec<u8>, spec: WriteSpec, data_len: u32) -> 
     }
 }
 
-fn push_pcm_header(out: &mut Vec<u8>, spec: WriteSpec, data_len: u32) -> Result<()> {
+pub(super) fn needs_rf64(spec: WriteSpec, data_len: u64) -> bool {
+    u64::from(riff_prefix(spec)).saturating_add(data_len) > u64::from(u32::MAX)
+}
+
+/// RF64 header bytes including the `data` size field (payload follows).
+pub(super) fn rf64_header_len(spec: WriteSpec) -> u64 {
+    // RF64+WAVE (12) + ds64 (36) + fmt + optional fact + data hdr (8).
+    if spec.format.is_float() { 94 } else { 80 }
+}
+
+pub(super) const RF64_RIFF_SIZE_POS: u64 = 20;
+pub(super) const RF64_DATA_SIZE_POS: u64 = 28;
+pub(super) const RF64_SAMPLE_COUNT_POS: u64 = 36;
+/// `fact` sampleCount in an RF64 IEEE header (after ds64 + WAVEFORMATEX).
+pub(super) const RF64_FACT_FRAMES_POS: u64 = 82;
+
+pub(super) fn push_rf64_header(
+    out: &mut Vec<u8>,
+    spec: WriteSpec,
+    data_len: u64,
+    frames: u64,
+) -> Result<()> {
+    let header_len = rf64_header_len(spec);
+    let file_len = header_len.saturating_add(data_len);
+    let riff_size = file_len.saturating_sub(8);
+    out.extend_from_slice(b"RF64");
+    out.extend_from_slice(&u32::MAX.to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    out.extend_from_slice(b"ds64");
+    out.extend_from_slice(&28u32.to_le_bytes());
+    out.extend_from_slice(&riff_size.to_le_bytes());
+    out.extend_from_slice(&data_len.to_le_bytes());
+    out.extend_from_slice(&frames.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    push_fmt_and_data(out, spec, u32::MAX, frames.min(u64::from(u32::MAX)) as u32)
+}
+
+fn push_fmt_and_data(
+    out: &mut Vec<u8>,
+    spec: WriteSpec,
+    data_len: u32,
+    frames_u32: u32,
+) -> Result<()> {
+    if spec.format.is_float() {
+        let block = spec.channels.saturating_mul(4);
+        let byte_rate = spec
+            .sample_rate
+            .checked_mul(u32::from(block))
+            .ok_or(WavError::RiffTooLarge)?;
+        out.extend_from_slice(b"fmt ");
+        out.extend_from_slice(&18u32.to_le_bytes());
+        out.extend_from_slice(&3u16.to_le_bytes());
+        out.extend_from_slice(&spec.channels.to_le_bytes());
+        out.extend_from_slice(&spec.sample_rate.to_le_bytes());
+        out.extend_from_slice(&byte_rate.to_le_bytes());
+        out.extend_from_slice(&block.to_le_bytes());
+        out.extend_from_slice(&32u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(b"fact");
+        out.extend_from_slice(&4u32.to_le_bytes());
+        out.extend_from_slice(&frames_u32.to_le_bytes());
+        out.extend_from_slice(b"data");
+        out.extend_from_slice(&data_len.to_le_bytes());
+        Ok(())
+    } else {
+        push_pcm_fmt_data(out, spec, data_len)
+    }
+}
+
+fn push_pcm_fmt_data(out: &mut Vec<u8>, spec: WriteSpec, data_len: u32) -> Result<()> {
     let width = spec.format.bytes_per_sample() as u16;
     let block = spec.channels.saturating_mul(width);
     let byte_rate = spec
         .sample_rate
         .checked_mul(u32::from(block))
         .ok_or(WavError::RiffTooLarge)?;
-    let riff_len = PCM_RIFF_PREFIX
-        .checked_add(data_len)
-        .ok_or(WavError::RiffTooLarge)?;
-    out.extend_from_slice(b"RIFF");
-    out.extend_from_slice(&riff_len.to_le_bytes());
-    out.extend_from_slice(b"WAVE");
     out.extend_from_slice(b"fmt ");
     out.extend_from_slice(&16u32.to_le_bytes());
     out.extend_from_slice(&1u16.to_le_bytes());
@@ -87,6 +150,16 @@ fn push_pcm_header(out: &mut Vec<u8>, spec: WriteSpec, data_len: u32) -> Result<
     Ok(())
 }
 
+fn push_pcm_header(out: &mut Vec<u8>, spec: WriteSpec, data_len: u32) -> Result<()> {
+    let riff_len = PCM_RIFF_PREFIX
+        .checked_add(data_len)
+        .ok_or(WavError::RiffTooLarge)?;
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&riff_len.to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    push_pcm_fmt_data(out, spec, data_len)
+}
+
 fn push_float_header(
     out: &mut Vec<u8>,
     sr: u32,
@@ -94,29 +167,16 @@ fn push_float_header(
     data_len: u32,
     frames: u32,
 ) -> Result<()> {
-    let block = ch.saturating_mul(4);
-    let byte_rate = sr
-        .checked_mul(u32::from(block))
-        .ok_or(WavError::RiffTooLarge)?;
+    let spec = WriteSpec {
+        sample_rate: sr,
+        channels: ch,
+        format: WriteFormat::F32,
+    };
     let riff_len = FLOAT_RIFF_PREFIX
         .checked_add(data_len)
         .ok_or(WavError::RiffTooLarge)?;
     out.extend_from_slice(b"RIFF");
     out.extend_from_slice(&riff_len.to_le_bytes());
     out.extend_from_slice(b"WAVE");
-    out.extend_from_slice(b"fmt ");
-    out.extend_from_slice(&18u32.to_le_bytes());
-    out.extend_from_slice(&3u16.to_le_bytes());
-    out.extend_from_slice(&ch.to_le_bytes());
-    out.extend_from_slice(&sr.to_le_bytes());
-    out.extend_from_slice(&byte_rate.to_le_bytes());
-    out.extend_from_slice(&block.to_le_bytes());
-    out.extend_from_slice(&32u16.to_le_bytes());
-    out.extend_from_slice(&0u16.to_le_bytes());
-    out.extend_from_slice(b"fact");
-    out.extend_from_slice(&4u32.to_le_bytes());
-    out.extend_from_slice(&frames.to_le_bytes());
-    out.extend_from_slice(b"data");
-    out.extend_from_slice(&data_len.to_le_bytes());
-    Ok(())
+    push_fmt_and_data(out, spec, data_len, frames)
 }

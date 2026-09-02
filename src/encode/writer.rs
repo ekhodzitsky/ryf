@@ -1,12 +1,14 @@
-//! Incremental classic-RIFF writer. Sizes are patched on [`WavWriter::finalize`]
-//! or on drop.
+//! Incremental WAVE writer (RIFF, or RF64 via [`WavWriter::new_rf64`]).
+//! Sizes are patched on [`WavWriter::finalize`] or on drop.
 
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 
 use super::header::{
-    data_len_pos, fact_frames_pos, frame_bytes, push_header, riff_prefix, u32_len, validate_spec,
+    RF64_DATA_SIZE_POS, RF64_FACT_FRAMES_POS, RF64_RIFF_SIZE_POS, RF64_SAMPLE_COUNT_POS,
+    data_len_pos, fact_frames_pos, frame_bytes, push_header, push_rf64_header, rf64_header_len,
+    riff_prefix, u32_len, validate_spec,
 };
 use super::{WriteFormat, WriteSpec};
 use crate::error::{Result, WavError};
@@ -18,12 +20,18 @@ pub struct WavWriter<W: Write + Seek> {
     spec: WriteSpec,
     data_bytes: u64,
     finalized: bool,
+    rf64: bool,
 }
 
 impl WavWriter<File> {
     /// Create `path` and write a WAVE header with a zero-length `data` chunk.
     pub fn create(path: &Path, spec: WriteSpec) -> Result<Self> {
         Self::new(File::create(path)?, spec)
+    }
+
+    /// Create `path` as RF64 (sizes in `ds64`; no 4 GiB cap).
+    pub fn create_rf64(path: &Path, spec: WriteSpec) -> Result<Self> {
+        Self::new_rf64(File::create(path)?, spec)
     }
 }
 
@@ -39,6 +47,22 @@ impl<W: Write + Seek> WavWriter<W> {
             spec,
             data_bytes: 0,
             finalized: false,
+            rf64: false,
+        })
+    }
+
+    /// Write an RF64 header (`ds64` + `0xFFFFFFFF` sizes) onto `inner`.
+    pub fn new_rf64(mut inner: W, spec: WriteSpec) -> Result<Self> {
+        validate_spec(spec)?;
+        let mut header = Vec::with_capacity(94);
+        push_rf64_header(&mut header, spec, 0, 0)?;
+        inner.write_all(&header)?;
+        Ok(Self {
+            inner,
+            spec,
+            data_bytes: 0,
+            finalized: false,
+            rf64: true,
         })
     }
 
@@ -55,7 +79,7 @@ impl<W: Write + Seek> WavWriter<W> {
             .data_bytes
             .checked_add(pcm.len() as u64)
             .ok_or(WavError::RiffTooLarge)?;
-        if next > u64::from(u32::MAX) {
+        if !self.rf64 && next > u64::from(u32::MAX) {
             return Err(WavError::RiffTooLarge);
         }
         self.inner.write_all(pcm)?;
@@ -93,6 +117,9 @@ impl<W: Write + Seek> WavWriter<W> {
     }
 
     fn patch(&mut self) -> Result<()> {
+        if self.rf64 {
+            return self.patch_rf64();
+        }
         let data_len =
             u32_len(usize::try_from(self.data_bytes).map_err(|_| WavError::RiffTooLarge)?)?;
         let riff_len = riff_prefix(self.spec)
@@ -108,6 +135,28 @@ impl<W: Write + Seek> WavWriter<W> {
         }
         self.inner.seek(SeekFrom::Start(data_len_pos(self.spec)))?;
         self.inner.write_all(&data_len.to_le_bytes())?;
+        self.inner.seek(SeekFrom::End(0))?;
+        Ok(())
+    }
+
+    fn patch_rf64(&mut self) -> Result<()> {
+        let data_len = self.data_bytes;
+        let fb = frame_bytes(self.spec)? as u64;
+        let frames = data_len.checked_div(fb).unwrap_or(0);
+        let riff_size = rf64_header_len(self.spec)
+            .saturating_add(data_len)
+            .saturating_sub(8);
+        self.inner.seek(SeekFrom::Start(RF64_RIFF_SIZE_POS))?;
+        self.inner.write_all(&riff_size.to_le_bytes())?;
+        self.inner.seek(SeekFrom::Start(RF64_DATA_SIZE_POS))?;
+        self.inner.write_all(&data_len.to_le_bytes())?;
+        self.inner.seek(SeekFrom::Start(RF64_SAMPLE_COUNT_POS))?;
+        self.inner.write_all(&frames.to_le_bytes())?;
+        if self.spec.format.is_float() {
+            let fact = frames.min(u64::from(u32::MAX)) as u32;
+            self.inner.seek(SeekFrom::Start(RF64_FACT_FRAMES_POS))?;
+            self.inner.write_all(&fact.to_le_bytes())?;
+        }
         self.inner.seek(SeekFrom::End(0))?;
         Ok(())
     }

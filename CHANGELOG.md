@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-02
+
+### Added
+
+- G.711 A-law / µ-law 256-entry LUT + bulk convert (collect and pull).
+- Headerless G.711: `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`
+  (`G711Law`; rate and channels stated by the caller).
+- RF64 write: `encode` upgrades when RIFF `u32` sizes overflow;
+  `encode_rf64` / `write_rf64` / `WavWriter::new_rf64` force RF64.
+
 ## [0.2.0] - 2026-09-01
 
 ### Added

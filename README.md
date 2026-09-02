@@ -28,7 +28,7 @@ dependencies.
 | IEEE f64 | yes | no | yes |
 | G.711 A-law / µ-law | yes | no | yes |
 | MS + IMA ADPCM | yes (`adpcm`) | no | limited |
-| Write | RIFF PCM 8/16/24/32 + f32, 1–26 ch | PCM/IEEE, many depths | no |
+| Write | RIFF + RF64 PCM 8/16/24/32 + f32, 1–26 ch | PCM/IEEE, many depths | no |
 | Default deps | **none** | none | several |
 | Output | planar `f32`, native rate | typed sample iterator | decoded packets |
 | Duration / RAM caps | yes (`speech` / `unbounded`) | no | no |
@@ -120,7 +120,9 @@ fn main() -> ryf::Result<()> {
 ```
 
 From a path: `read` / `read_with` (planar `f32`), `read_s16` / `read_f32`
-(molv drop-ins). From a `File` or any `Read + Seek`:
+(molv drop-ins). Headerless G.711 (rate stated by the caller):
+`decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`.
+From a `File` or any `Read + Seek`:
 `ByteSource::from_file` / `from_read_seek` + `decode_with`.
 
 ```sh
@@ -150,12 +152,15 @@ Also:
 
 ## Write
 
-Classic little-endian RIFF only. No RF64, no RIFX, no ADPCM encode.
-Channels `1..=26` (same ceiling as decode). Empty payload is a valid header.
+Little-endian WAVE. Classic RIFF when sizes fit in `u32`; **RF64** when they
+do not (or via `encode_rf64` / `WavWriter::new_rf64`). No RIFX, no ADPCM
+encode. Channels `1..=26` (same ceiling as decode). Empty payload is a valid
+header.
 
 | | Notes |
 |---|---|
-| `encode` / `write` + `WriteSpec` | U8, S16, packed S24, S32, IEEE f32 |
+| `encode` / `write` + `WriteSpec` | U8, S16, packed S24, S32, IEEE f32; auto RF64 |
+| `encode_rf64` / `write_rf64` | force RF64 (`ds64`) |
 | `encode_s16` / `write_s16` | molv drop-in, PCM16 **mono** |
 | `encode_f32` / `write_f32` | interleaved f32 |
 | `WavWriter` | streaming; sizes patched on `finalize` or drop |
@@ -256,8 +261,9 @@ just bench
 - Differential suite vs **ffmpeg** (bit-exact `f32` on lossless PCM / G.711)
   when `ffmpeg` is on `PATH`. ffmpeg is a **test oracle**, not a runtime dep.
 - SIMD paths match scalar bit-for-bit.
-- `unsafe` is confined to `convert/simd.rs` and uninit `f32` scratch (Copy,
-  every element written before `Ok`); each block has a SAFETY comment.
+- `unsafe` is confined to `convert/simd.rs`, G.711 `u8` table lookup, and
+  uninit `f32` scratch (Copy, every element written before `Ok`); each
+  block has a SAFETY comment.
 
 ```sh
 cargo test
@@ -268,7 +274,7 @@ cargo bench --bench wav
 
 ## Non-goals
 
-- RF64 / ADPCM / RIFX **encode**
+- ADPCM / RIFX **encode**
 - GSM, MPEG-in-WAV, and other exotic codecs
 - Resampling
 - Async I/O (sync demux; call from `spawn_blocking` in async apps)

@@ -291,6 +291,14 @@ fn benches(c: &mut Criterion) {
     });
     encode_g.finish();
 
+    let mulaw: Vec<u8> = (0..FRAMES).map(|i| (i % 256) as u8).collect();
+    let mut g711 = c.benchmark_group("g711");
+    g711.throughput(Throughput::Bytes(mulaw.len() as u64));
+    g711.bench_function("ryf/decode_g711_mulaw_2s", |b| {
+        b.iter(|| std::hint::black_box(ryf::decode_g711_mulaw(&mulaw, RATE).expect("g711")));
+    });
+    g711.finish();
+
     let mut stream = c.benchmark_group("stream");
     stream.throughput(Throughput::Bytes(s16_mono.len() as u64));
     stream.bench_function("ryf/decode_streaming_s16_mono_2s", |b| {

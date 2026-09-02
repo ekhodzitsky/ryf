@@ -8,7 +8,8 @@ use super::{
 };
 use crate::ChannelMode;
 use crate::convert::{
-    convert_f32_mono, convert_s16_mono, convert_sample, mix_s16_le_to_f32, split_s16_le_to_f32,
+    convert_f32_mono, convert_g711_mono, convert_s16_mono, convert_sample, g711_table, mix_g711,
+    mix_s16_le_to_f32, split_g711, split_s16_le_to_f32,
 };
 use crate::error::{Result, WavError};
 use crate::header::SampleCodec;
@@ -300,28 +301,44 @@ where
             .map_err(WavError::packet_io)?;
         bytes_left -= want as u64;
 
-        match mode {
-            ChannelMode::Mono => {
-                let mono = &mut planar[0];
-                if channels == 1 {
-                    for (i, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
-                        mono[i] = convert_sample(codec, frame, big_endian);
-                    }
-                } else {
-                    let n_ch = channels as f32;
-                    for (i, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
-                        let mut sum = 0.0f32;
-                        for sample in frame.chunks_exact(sample_width) {
-                            sum += convert_sample(codec, sample, big_endian);
-                        }
-                        mono[i] = sum / n_ch;
-                    }
+        if let Some(table) = g711_fast(codec, sample_width, big_endian) {
+            match mode {
+                ChannelMode::Mono if channels == 1 => {
+                    convert_g711_mono(&raw[..want], &mut planar[0][..frames_this], table);
+                }
+                ChannelMode::Mono => {
+                    mix_g711(&raw[..want], &mut planar[0][..frames_this], channels, table);
+                }
+                ChannelMode::Split => {
+                    let mut planes: Vec<&mut [f32]> =
+                        planar.iter_mut().map(|p| &mut p[..frames_this]).collect();
+                    split_g711(&raw[..want], &mut planes, table);
                 }
             }
-            ChannelMode::Split => {
-                for (fi, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
-                    for (c, sample) in frame.chunks_exact(sample_width).enumerate() {
-                        planar[c][fi] = convert_sample(codec, sample, big_endian);
+        } else {
+            match mode {
+                ChannelMode::Mono => {
+                    let mono = &mut planar[0];
+                    if channels == 1 {
+                        for (i, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
+                            mono[i] = convert_sample(codec, frame, big_endian);
+                        }
+                    } else {
+                        let n_ch = channels as f32;
+                        for (i, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
+                            let mut sum = 0.0f32;
+                            for sample in frame.chunks_exact(sample_width) {
+                                sum += convert_sample(codec, sample, big_endian);
+                            }
+                            mono[i] = sum / n_ch;
+                        }
+                    }
+                }
+                ChannelMode::Split => {
+                    for (fi, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
+                        for (c, sample) in frame.chunks_exact(sample_width).enumerate() {
+                            planar[c][fi] = convert_sample(codec, sample, big_endian);
+                        }
                     }
                 }
             }
@@ -351,4 +368,19 @@ where
         }
     }
     Ok(decoded)
+}
+
+fn g711_fast(
+    codec: SampleCodec,
+    sample_width: usize,
+    big_endian: bool,
+) -> Option<&'static [f32; 256]> {
+    if big_endian || sample_width != 1 {
+        return None;
+    }
+    match codec {
+        SampleCodec::ALaw => Some(g711_table(true)),
+        SampleCodec::MuLaw => Some(g711_table(false)),
+        _ => None,
+    }
 }

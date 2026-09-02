@@ -4,7 +4,9 @@ use std::io::Seek;
 
 use super::{DecodePlan, check_duration, pcm_short, pull_decode, scratch_frames, uninit_f32_vec};
 use crate::ChannelMode;
-use crate::convert::{convert_f32_mono, convert_s16_mono, mix_s16_le_to_f32, split_s16_le_to_f32};
+use crate::convert::{
+    convert_f32_mono, convert_s16_mono, g711_table, mix_s16_le_to_f32, split_s16_le_to_f32,
+};
 use crate::error::{Result, WavError};
 use crate::header::SampleCodec;
 use crate::scrub::scrub_vec;
@@ -73,6 +75,38 @@ pub(crate) fn decode_collect(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Res
             }
             (ChannelMode::Split, SampleCodec::S16, n, 2) => {
                 return fill_split_s16(mss, total, frame_bytes, n, max_samples, sample_rate);
+            }
+            (ChannelMode::Mono, SampleCodec::ALaw | SampleCodec::MuLaw, 1, 1) => {
+                let table = g711_table(matches!(codec, SampleCodec::ALaw));
+                #[allow(clippy::uninit_vec)]
+                let mut out = {
+                    let mut v = Vec::with_capacity(total);
+                    // SAFETY: fill_mono writes all `total` elements before Ok.
+                    unsafe {
+                        v.set_len(total);
+                    }
+                    v
+                };
+                super::g711::fill_mono(mss, &mut out, max_samples, sample_rate, table)?;
+                return Ok(vec![out]);
+            }
+            (ChannelMode::Mono, SampleCodec::ALaw | SampleCodec::MuLaw, n, 1) if n > 1 => {
+                let table = g711_table(matches!(codec, SampleCodec::ALaw));
+                #[allow(clippy::uninit_vec)]
+                let mut out = {
+                    let mut v = Vec::with_capacity(total);
+                    // SAFETY: fill_mix writes all `total` elements before Ok.
+                    unsafe {
+                        v.set_len(total);
+                    }
+                    v
+                };
+                super::g711::fill_mix(mss, &mut out, n, max_samples, sample_rate, table)?;
+                return Ok(vec![out]);
+            }
+            (ChannelMode::Split, SampleCodec::ALaw | SampleCodec::MuLaw, n, 1) => {
+                let table = g711_table(matches!(codec, SampleCodec::ALaw));
+                return super::g711::fill_split(mss, total, n, max_samples, sample_rate, table);
             }
             _ => {}
         }

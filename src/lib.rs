@@ -6,6 +6,7 @@ mod adpcm;
 mod convert;
 mod encode;
 mod error;
+mod g711;
 pub(crate) mod header;
 mod options;
 mod pull;
@@ -15,9 +16,11 @@ mod wav;
 
 pub use convert::{f32_to_s16le, s16le_to_f32};
 pub use encode::{
-    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_s16, write, write_f32, write_s16,
+    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_rf64, encode_s16, write,
+    write_f32, write_rf64, write_s16,
 };
 pub use error::{Result, WavError};
+pub use g711::{G711Law, decode_g711, decode_g711_alaw, decode_g711_mulaw};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,
     DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,

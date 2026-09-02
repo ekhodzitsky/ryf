@@ -1,7 +1,8 @@
-//! Classic RIFF encode: integer PCM 8/16/24/32, IEEE f32, 1–26 channels.
+//! WAVE encode: integer PCM 8/16/24/32, IEEE f32, 1–26 channels.
 //!
-//! Drop-in molv path: [`encode_s16`] (mono) / [`encode_f32`] / [`write_s16`].
-//! No RF64, no ADPCM, no RIFX.
+//! Classic RIFF when it fits; RF64 when the payload would overflow a `u32`
+//! size, or via [`encode_rf64`]. Drop-in molv path: [`encode_s16`] (mono) /
+//! [`encode_f32`] / [`write_s16`]. No ADPCM, no RIFX.
 
 use std::fs::File;
 use std::io::Write;
@@ -12,7 +13,7 @@ use crate::error::{Result, WavError};
 mod header;
 mod writer;
 
-use header::{frame_bytes, push_header, u32_len, validate_spec};
+use header::{frame_bytes, needs_rf64, push_header, push_rf64_header, u32_len, validate_spec};
 pub use writer::WavWriter;
 
 /// Sample format written as classic little-endian RIFF.
@@ -115,21 +116,48 @@ impl WriteSpec {
     }
 }
 
-/// Encode interleaved PCM bytes as classic RIFF/WAVE.
+/// Encode interleaved PCM bytes as WAVE.
 ///
-/// `pcm` length must be a whole number of frames. Empty `pcm` is a valid
-/// header-only WAVE.
+/// Classic RIFF when the sizes fit in `u32`; RF64 otherwise. `pcm` length
+/// must be a whole number of frames. Empty `pcm` is a valid header-only WAVE.
 pub fn encode(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
     validate_spec(spec)?;
     let fb = frame_bytes(spec)?;
     if !pcm.len().is_multiple_of(fb) {
         return Err(WavError::OddPcm);
     }
+    let data_len = pcm.len() as u64;
+    if needs_rf64(spec, data_len) {
+        return encode_rf64(spec, pcm);
+    }
     let data_len = u32_len(pcm.len())?;
     let mut out = Vec::with_capacity(58usize.saturating_add(pcm.len()));
     push_header(&mut out, spec, data_len)?;
     out.extend_from_slice(pcm);
     Ok(out)
+}
+
+/// Encode interleaved PCM as RF64 even when the file would fit in RIFF.
+pub fn encode_rf64(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
+    validate_spec(spec)?;
+    let fb = frame_bytes(spec)?;
+    if !pcm.len().is_multiple_of(fb) {
+        return Err(WavError::OddPcm);
+    }
+    let data_len = pcm.len() as u64;
+    let frames = data_len / fb as u64;
+    let mut out = Vec::with_capacity(94usize.saturating_add(pcm.len()));
+    push_rf64_header(&mut out, spec, data_len, frames)?;
+    out.extend_from_slice(pcm);
+    Ok(out)
+}
+
+/// Write [`encode_rf64`] output to `path`.
+pub fn write_rf64(path: &Path, spec: WriteSpec, pcm: &[u8]) -> Result<()> {
+    let bytes = encode_rf64(spec, pcm)?;
+    let mut f = File::create(path)?;
+    f.write_all(&bytes)?;
+    Ok(())
 }
 
 /// Write [`encode`] output to `path`.
