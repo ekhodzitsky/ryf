@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README is the crate pitch (≤100 lines). Read/write/API/benches/correctness
+  live under `docs/`.
+
 ### Fixed
 
 - ffmpeg oracle: NaN payloads compare equal (Linux CI vs ffmpeg f32).
