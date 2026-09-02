@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking.** `ByteSource` requires `Send`. `WavWriter` requires
   `Read + Write + Seek` and auto-promotes RIFF → RF64 like `encode`.
 - Crate rustdoc is the API, not the GitHub README.
-- README says **why ryf** versus hound / Symphonia / dr_wav / ffmpeg.
+- README is the ingest job (untrusted / telephony WAVE → planar `f32`);
+  `read` vs `read_speech` is on the first screen. Install pins `tag = "v0.3.0"`.
 
 ### Removed
 

@@ -2,82 +2,74 @@
 
 just wav.
 
-Pure-Rust **WAVE family** codec: PCM drop-in plus G.711, MS/IMA ADPCM,
-RF64, Wave64, extensible GUIDs, wild headers, RAM/duration caps. Zero
-crates on the default feature set. Read RIFF / RIFX / RF64 / BW64 / Sony
-Wave64. Write RIFF PCM 8/16/24/32 + IEEE f32; **RF64** when `u32`
-overflows. Planar `f32` out, native rate. No resample.
+Untrusted or telephony **WAVE** → planar `f32` in-process. Zero crates on
+the default feature set, no C in the binary, no ffmpeg, no resample.
+Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, MS/IMA ADPCM, wild
+headers. Write RIFF PCM 8/16/24/32 + IEEE f32; **RF64** when `u32`
+overflows.
 
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![rustc](https://img.shields.io/badge/rustc-1.88+-lightgrey.svg)](Cargo.toml)
 [![deps](https://img.shields.io/badge/deps-zero-success.svg)](Cargo.toml)
 
-**Why ryf.** The bytes are WAVE — including G.711, ADPCM, RF64, RIFX,
-Wave64, and wild headers — and you want planar `f32` in-process: zero
-crates, no C in the binary, hard RAM/duration caps. [hound](https://github.com/ruuda/hound)
-and [wavers](https://github.com/jmg049/wavers) stop at PCM/IEEE RIFF
-(wavers is archived for [`audio_samples_io`](https://crates.io/crates/audio_samples_io)).
+**For:** speech ingest, phone recordings, user `.wav` uploads that
+[hound](https://github.com/ruuda/hound) will not open (µ-law, ADPCM, RF64,
+broken `fmt`). **Not for:** a player, a DAW, FLAC/MP3, resampling to 16 kHz.
+
+[hound](https://github.com/ruuda/hound) is PCM/IEEE RIFF.
 [symphonia](https://github.com/pdeljanov/Symphonia) is a media pipeline.
-[dr_wav](https://github.com/mackron/dr_libs) is the usual embedded C header.
-ffmpeg is a process, not a library.
+[dr_wav](https://github.com/mackron/dr_libs) is C. ffmpeg is a process.
+Matrix: [compare](docs/compare.md).
 
-| | ryf | hound | symphonia | wavers | dr_wav (C) |
-|---|---|---|---|---|---|
-| Containers | RIFF, RIFX, RF64/BW64, W64 | RIFF | via codecs | RIFF | RIFF, RF64, W64 |
-| G.711 / ADPCM | yes / yes | no / no | yes / limited | no / no | yes / yes |
-| Write | RIFF + RF64 PCM + f32 | PCM/IEEE | no | PCM/IEEE (path) | PCM/IEEE/G.711 |
-| Default deps | **none** | none | several | several | none (`.h`) |
-| Caps | 2 h / 4 GiB | no | no | no | no |
+## Read
 
-[compare](docs/compare.md) · [benchmarks](docs/benchmarks.md) ·
+`read` / `decode_bytes` — one plane per channel, archival caps.
+
+`read_speech` / `DecodeOptions::speech()` — **mix to mono**, 2 h / 192 kHz /
+4 GiB. Use this for STT or untrusted upload.
+
+```rust
+fn main() -> ryf::Result<()> {
+    let wav = ryf::read("in.wav")?;
+    println!(
+        "{} Hz, {} ch, {} frames",
+        wav.sample_rate,
+        wav.num_channels(),
+        wav.frames()
+    );
+    Ok(())
+}
+```
+
+In-memory: `decode_bytes`. Headerless µ-law/A-law: `decode_g711`.
+`impl Read` without seek: `decode_reader`. Write: `encode` / `write_s16` /
+`WavWriter`.
+
 [read](docs/read.md) · [write](docs/write.md) · [api](docs/api.md) ·
-[correctness](docs/correctness.md)
+[benchmarks](docs/benchmarks.md) · [correctness](docs/correctness.md)
 
 ## Install
 
 ```toml
 [dependencies]
-ryf = { git = "https://github.com/ekhodzitsky/ryf" }
+ryf = { git = "https://github.com/ekhodzitsky/ryf", tag = "v0.3.0" }
 ```
 
 rustc **1.88**. Not on crates.io (`publish = false`). Default features
 (`adpcm` + `simd`) pull **no crates**.
-
-PCM drop-in below (`write_s16` / `read`). Family ingest is `decode_bytes` /
-`decode_g711`. `read` splits channels with archival caps. Mix + 2 h:
-`read_speech`. s16 pack uses the same `/ 32768` scale as decode.
-
-```rust
-fn main() -> ryf::Result<()> {
-    let pcm = ryf::f32_to_s16le(&[0.25, -0.5, 0.0]);
-    let path = std::env::temp_dir().join(format!("ryf-readme-{}.wav", std::process::id()));
-    ryf::write_s16(&path, &pcm, 16_000)?;
-    let wav = ryf::read(&path)?;
-    assert_eq!(wav.sample_rate, 16_000);
-    assert_eq!(wav.frames(), 3);
-    let _ = std::fs::remove_file(&path);
-    Ok(())
-}
-```
-
-`read` / `read_speech` / `decode_bytes` / `decode_reader` / `decode_g711` /
-`encode` / `WavWriter`.
-`cargo run --example decode`.
 
 ## Speed
 
 Apple Silicon (aarch64, NEON), 2 s @ 16 kHz **in-memory** RIFF → mixed
 planar f32. Linux x86 / SSE not measured.
 PCM16 mono: **3.78 µs** vs dr_wav 16.3 µs (**4.3×**) / wavers 18.5 (**4.9×**) /
-Symphonia 102 (**27×**) / hound 186 (**49×**). Encode f32: **3.30 µs** vs
-dr_wav 9.12 (**2.8×**) / hound 44 (**13×**). Encode s16 is a **tie** with
-dr_wav (ryf ~5.7 µs, dr_wav ~5.4 µs). Cache-hot STT clip, not a file on disk.
-Full table: [docs/benchmarks.md](docs/benchmarks.md).
+Symphonia 102 (**27×**) / hound 186 (**49×**). Encode s16 is a **tie** with
+dr_wav. Cache-hot clip, not a file on disk.
+[docs/benchmarks.md](docs/benchmarks.md).
 
 ## Not this
 
 ADPCM / RIFX / G.711 encode. GSM, MPEG-in-WAV. Resample. Async. `mmap`.
 Not a player. ffmpeg is a **test oracle**, not a runtime dep.
-[docs/correctness.md](docs/correctness.md).
 
 MIT OR Apache-2.0. [CHANGELOG](CHANGELOG.md).
