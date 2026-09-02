@@ -10,6 +10,10 @@ Output is **planar `f32`** at the file's native sample rate. No resample.
 Streaming (`decode_streaming`) shares the convert kernels and keeps peak
 RAM at ~256 KiB of source PCM plus one planar block.
 
+Headerless telephony: `decode_g711` / `decode_g722`. G.722 is 64 kbit/s
+SB-ADPCM; output is always 16 kHz. WAVE tags `0x0064` (Asterisk/SBC),
+`0x0065` (mmreg), `0x028F` (ffmpeg). `probe` reports `ProbeCodec::G722`.
+
 ## Caps
 
 | | `DecodeOptions::speech()` / `read_speech` | `DecodeOptions::default()` / `unbounded` / `read` |

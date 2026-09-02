@@ -19,10 +19,15 @@ fn container_and_codec_helpers() {
     assert_eq!(SampleCodec::MuLaw.probe(), ProbeCodec::MuLaw);
     assert_eq!(SampleCodec::MsAdpcm.probe(), ProbeCodec::MsAdpcm);
     assert_eq!(SampleCodec::ImaAdpcm.probe(), ProbeCodec::ImaAdpcm);
+    assert_eq!(SampleCodec::G722.probe(), ProbeCodec::G722);
     assert_eq!(SampleCodec::Unsupported.probe(), ProbeCodec::Unsupported);
     assert!(SampleCodec::MsAdpcm.is_adpcm());
     assert!(SampleCodec::ImaAdpcm.is_adpcm());
+    assert!(!SampleCodec::G722.is_adpcm());
     assert!(!SampleCodec::S16.is_adpcm());
+    assert_eq!(WAVE_FORMAT_G722_ASTERISK, 0x0064);
+    assert_eq!(WAVE_FORMAT_G722_ADPCM, 0x0065);
+    assert_eq!(WAVE_FORMAT_ADPCM_G722, 0x028F);
 }
 
 #[test]

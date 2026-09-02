@@ -20,6 +20,9 @@ pub(crate) fn decode_collect(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Res
     if plan.codec.is_adpcm() {
         return super::adpcm::collect_adpcm(mss, plan);
     }
+    if plan.codec == SampleCodec::G722 {
+        return super::g722::collect_g722(mss, plan);
+    }
 
     let total = plan.total_frames;
     let max_samples = plan.max_samples;

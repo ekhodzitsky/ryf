@@ -96,17 +96,30 @@ pub fn probe(mss: &mut ByteSource<'_>) -> Result<WavProbe> {
 /// Probe a RIFF/WAVE stream (positioned at offset 0) without decoding PCM.
 pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProbe> {
     let header = parse_header(mss)?;
-    let sample_rate = header.fmt.sample_rate;
-    if sample_rate == 0 || sample_rate > opts.max_sample_rate {
-        return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
+    let header_rate = header.fmt.sample_rate;
+    if header_rate == 0 || header_rate > opts.max_sample_rate {
+        return Err(WavError::sample_rate(header_rate, opts.max_sample_rate));
     }
     if matches!(header.fmt.codec, SampleCodec::Unsupported) {
         return Err(WavError::unsupported_codec(header.fmt.format_tag));
     }
+    let sample_rate = crate::g722::output_rate(header.fmt.codec, header_rate);
+    if sample_rate > opts.max_sample_rate {
+        return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
+    }
     if header.fmt.codec.is_adpcm() {
         ensure_adpcm_enabled()?;
     }
-    let declared_frames = if let Some(sc) = header.declared_sample_count {
+    let declared_frames = if header.fmt.codec == SampleCodec::G722 {
+        match header.declared_data_len {
+            Some(d) => Some(crate::g722::pcm_frames_capped(
+                d,
+                header.fmt.channels,
+                header.declared_sample_count,
+            )),
+            None => header.declared_sample_count,
+        }
+    } else if let Some(sc) = header.declared_sample_count {
         Some(sc)
     } else if header.fmt.codec.is_adpcm() {
         let (ba, spb) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {

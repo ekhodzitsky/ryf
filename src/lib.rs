@@ -2,7 +2,8 @@
 //!
 //! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
 //! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /
-//! [`DecodeOptions::speech`].
+//! [`DecodeOptions::speech`]. G.711 / G.722: WAVE tags plus headerless
+//! [`decode_g711`] / [`decode_g722`].
 //!
 //! [`DecodedWav`], [`WavError`], [`WriteSpec`]. GitHub README is the crate
 //! pitch; this page is the API.
@@ -25,6 +26,7 @@ mod convert;
 mod encode;
 mod error;
 mod g711;
+mod g722;
 pub(crate) mod header;
 mod options;
 mod pull;
@@ -39,6 +41,7 @@ pub use encode::{
 };
 pub use error::{FormatKind, Result, WavError};
 pub use g711::{G711Law, decode_g711, decode_g711_alaw, decode_g711_mulaw};
+pub use g722::{decode_g722, decode_g722_mono};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,
     DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,

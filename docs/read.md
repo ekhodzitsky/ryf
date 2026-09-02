@@ -8,6 +8,7 @@ Every listed codec is accepted in every listed container unless noted.
 | S24 in 4-byte containers | yes | yes | yes | yes |
 | IEEE f32 / f64 | yes | yes | yes | yes |
 | G.711 A-law / mu-law | yes | yes | yes | yes |
+| G.722 64 kbit/s (tags `0x0064` / `0x0065` / `0x028F`) | yes | yes | yes | yes |
 | MS-ADPCM, IMA/DVI ADPCM | yes | - | yes | yes |
 
 Also:
@@ -19,6 +20,11 @@ Also:
 
 Headerless G.711 (rate and channel count stated by the caller):
 `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`.
+
+Headerless G.722 (64 kbit/s; `sample_rate` 8000 or 16000, output always
+16 kHz): `decode_g722` / `decode_g722_mono`. WAVE G.722 also reports 16 kHz
+even when `fmt ` says 8000 (SDP clock). `0x0064` is the Asterisk/SBC alias
+(mmreg lists that tag as G.726).
 
 From a path: `read` (split, archival caps) / `read_speech` (mix, 2 h) /
 `read_with`. Molv drop-ins: `read_s16` / `read_f32`. From a `File` or any

@@ -57,7 +57,7 @@ pub enum WavError {
     ///
     /// `tag` is the WAVE `wFormatTag` (or extensible tag `0xFFFE`) when known;
     /// `0` means the API rejected a layout that is not a format tag (e.g. not
-    /// PCM16 mono on [`crate::decode_s16`], G.711 channel count, write spec).
+    /// PCM16 mono on [`crate::decode_s16`], G.711/G.722 channel count, write spec).
     UnsupportedCodec {
         /// WAVE format tag, or `0` if this was not a tagged codec.
         tag: u16,

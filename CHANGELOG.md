@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-02
+
+### Added
+
+- G.722 decode (64 kbit/s SB-ADPCM). WAVE tags `0x0064` (Asterisk/SBC;
+  mmreg names this G.726), `0x0065` (mmreg G.722), `0x028F` (ffmpeg).
+  Headerless `decode_g722` / `decode_g722_mono` (`?codec=g722`; SDP
+  `8000` or `16000`). Output / `probe` rate is always 16 kHz.
+  `ProbeCodec::G722`.
+
+### Changed
+
+- **Breaking.** `ProbeCodec` gains `G722`.
+
 ## [0.3.2] - 2026-09-02
 
 ### Changed

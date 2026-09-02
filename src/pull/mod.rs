@@ -8,6 +8,7 @@ use crate::source::ByteSource;
 
 mod adpcm;
 mod g711;
+mod g722;
 mod pcm;
 mod stream;
 
@@ -119,12 +120,16 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
     let max_secs = opts.max_duration_secs;
     let header = parse_header(mss)?;
 
-    let sample_rate = header.fmt.sample_rate;
-    if sample_rate == 0 || sample_rate > opts.max_sample_rate {
-        return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
+    let header_rate = header.fmt.sample_rate;
+    if header_rate == 0 || header_rate > opts.max_sample_rate {
+        return Err(WavError::sample_rate(header_rate, opts.max_sample_rate));
     }
     if matches!(header.fmt.codec, SampleCodec::Unsupported) {
         return Err(WavError::unsupported_codec(header.fmt.format_tag));
+    }
+    let sample_rate = crate::g722::output_rate(header.fmt.codec, header_rate);
+    if sample_rate > opts.max_sample_rate {
+        return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
     }
 
     let channels = header.fmt.channels;
@@ -147,6 +152,11 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
         let est = data_len.checked_div(ba).map(|n| n * spb).unwrap_or(0);
         reject_too_many_frames(est, sample_rate, max_samples, max_secs)?;
         (0, est as usize)
+    } else if header.fmt.codec == SampleCodec::G722 {
+        let frames =
+            crate::g722::pcm_frames_capped(data_len, channels, header.declared_sample_count);
+        reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
+        (channels, frames as usize)
     } else {
         let frame_bytes = sample_width
             .checked_mul(channels)
@@ -229,6 +239,9 @@ where
 
     if plan.codec.is_adpcm() {
         return adpcm::pull_adpcm(mss, plan, &mut on_block);
+    }
+    if plan.codec == SampleCodec::G722 {
+        return g722::pull_g722(mss, plan, &mut on_block);
     }
 
     let frame_bytes = plan.frame_bytes;

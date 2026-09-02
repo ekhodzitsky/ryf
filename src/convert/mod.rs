@@ -331,7 +331,10 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
         }
         SampleCodec::ALaw => g711::lut(&g711::ALAW_F32, b[0]),
         SampleCodec::MuLaw => g711::lut(&g711::MULAW_F32, b[0]),
-        SampleCodec::MsAdpcm | SampleCodec::ImaAdpcm | SampleCodec::Unsupported => 0.0,
+        SampleCodec::MsAdpcm
+        | SampleCodec::ImaAdpcm
+        | SampleCodec::G722
+        | SampleCodec::Unsupported => 0.0,
     }
 }
 

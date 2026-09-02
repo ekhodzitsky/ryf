@@ -1,13 +1,14 @@
-//! `fmt ` chunk body (PCM / IEEE / G.711 / ADPCM / EXTENSIBLE).
+//! `fmt ` chunk body (PCM / IEEE / G.711 / G.722 / ADPCM / EXTENSIBLE).
 
 use super::riff::{read_u16_endian, read_u32_endian};
 use super::{
     FmtFields, KSDATAFORMAT_SUBTYPE_ALAW, KSDATAFORMAT_SUBTYPE_AMBISONIC_IEEE_FLOAT,
     KSDATAFORMAT_SUBTYPE_AMBISONIC_PCM, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
-    KSDATAFORMAT_SUBTYPE_MULAW, KSDATAFORMAT_SUBTYPE_PCM, SampleCodec, WAVE_FORMAT_ADPCM_IMA,
-    WAVE_FORMAT_ADPCM_MS, WAVE_FORMAT_ALAW, WAVE_FORMAT_EXTENSIBLE, WAVE_FORMAT_IEEE_FLOAT,
-    WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width, fix_wave_channel_mask,
-    map_ambisonic_channel_count, map_wave_channel_count, pcm_codec_for,
+    KSDATAFORMAT_SUBTYPE_MULAW, KSDATAFORMAT_SUBTYPE_PCM, SampleCodec, WAVE_FORMAT_ADPCM_G722,
+    WAVE_FORMAT_ADPCM_IMA, WAVE_FORMAT_ADPCM_MS, WAVE_FORMAT_ALAW, WAVE_FORMAT_EXTENSIBLE,
+    WAVE_FORMAT_G722_ADPCM, WAVE_FORMAT_G722_ASTERISK, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_MULAW,
+    WAVE_FORMAT_PCM, container_width, fix_wave_channel_mask, map_ambisonic_channel_count,
+    map_wave_channel_count, pcm_codec_for,
 };
 use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
@@ -103,8 +104,12 @@ pub(super) fn parse_fmt_chunk(
                 format_tag: format,
             })
         }
-        WAVE_FORMAT_ALAW | WAVE_FORMAT_MULAW => {
-            // Canonical is 18; accept 16 and longer wild sizes.
+        WAVE_FORMAT_ALAW
+        | WAVE_FORMAT_MULAW
+        | WAVE_FORMAT_G722_ASTERISK
+        | WAVE_FORMAT_G722_ADPCM
+        | WAVE_FORMAT_ADPCM_G722 => {
+            // G.711 / G.722: canonical is 18; accept 16 and longer wild sizes.
             if chunk_len < 16 {
                 return Err(WavError::format(FormatKind::MalformedFmt));
             }
@@ -122,10 +127,10 @@ pub(super) fn parse_fmt_chunk(
             } else if chunk_len > 16 {
                 mss.ignore_bytes(u64::from(chunk_len - 16))?;
             }
-            let codec = if format == WAVE_FORMAT_ALAW {
-                SampleCodec::ALaw
-            } else {
-                SampleCodec::MuLaw
+            let codec = match format {
+                WAVE_FORMAT_ALAW => SampleCodec::ALaw,
+                WAVE_FORMAT_MULAW => SampleCodec::MuLaw,
+                _ => SampleCodec::G722,
             };
             let channels = map_wave_channel_count(num_channels)?;
             Ok(FmtFields {

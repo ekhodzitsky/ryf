@@ -67,6 +67,8 @@ pub(crate) const W64_GUID_FACT: [u8; 16] = [
     0x8C, 0xD1, 0x00, 0xC0, 0x4F, 0x8E, 0xDB, 0x8A,
 ];
 /// Codec identity from a WAVE `fmt ` chunk (no PCM decoded).
+///
+/// Adding a variant is a breaking change (the enum is exhaustive).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProbeCodec {
     PcmU8,
@@ -79,6 +81,8 @@ pub enum ProbeCodec {
     MuLaw,
     MsAdpcm,
     ImaAdpcm,
+    /// ITU-T G.722 SB-ADPCM (WAVE tags 0x0064 / 0x0065 / 0x028F).
+    G722,
     Unsupported,
 }
 
@@ -98,6 +102,7 @@ pub(crate) enum SampleCodec {
     MuLaw,
     MsAdpcm,
     ImaAdpcm,
+    G722,
     Unsupported,
 }
 
@@ -114,6 +119,7 @@ impl SampleCodec {
             SampleCodec::MuLaw => ProbeCodec::MuLaw,
             SampleCodec::MsAdpcm => ProbeCodec::MsAdpcm,
             SampleCodec::ImaAdpcm => ProbeCodec::ImaAdpcm,
+            SampleCodec::G722 => ProbeCodec::G722,
             SampleCodec::Unsupported => ProbeCodec::Unsupported,
         }
     }
@@ -157,6 +163,13 @@ pub(crate) const WAVE_FORMAT_IEEE_FLOAT: u16 = 0x0003;
 pub(crate) const WAVE_FORMAT_ALAW: u16 = 0x0006;
 pub(crate) const WAVE_FORMAT_MULAW: u16 = 0x0007;
 pub(crate) const WAVE_FORMAT_ADPCM_IMA: u16 = 0x0011;
+/// Asterisk / SBC / Cisco G.722-in-WAV (mmreg names this G.726; same codec
+/// as 0x028F in the telephony files this crate ingests).
+pub(crate) const WAVE_FORMAT_G722_ASTERISK: u16 = 0x0064;
+/// Microsoft `WAVE_FORMAT_G722_ADPCM`.
+pub(crate) const WAVE_FORMAT_G722_ADPCM: u16 = 0x0065;
+/// ffmpeg / libavcodec `ADPCM_G722`.
+pub(crate) const WAVE_FORMAT_ADPCM_G722: u16 = 0x028F;
 pub(crate) const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
 
 /// SubFormat GUIDs for WAVE_FORMAT_EXTENSIBLE (ksmedia.h), in on-disk byte
