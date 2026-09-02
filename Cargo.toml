@@ -5,14 +5,14 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 authors = ["Evgeny Khodzitsky"]
-description = "just wav. Pure-Rust WAVE family codec (RIFF/RIFX/RF64/BW64/Wave64 read; RIFF + RF64 PCM 8/16/24/32 + f32 write)."
+description = "just wav. Pure-Rust WAVE family ingest: RIFF/RIFX/RF64/BW64/Wave64, G.711, ADPCM → planar f32. Zero default deps."
 readme = "README.md"
 repository = "https://github.com/ekhodzitsky/ryf"
 homepage = "https://github.com/ekhodzitsky/ryf"
 documentation = "https://docs.rs/ryf"
-keywords = ["wav", "riff", "audio", "pcm", "codec"]
+keywords = ["wav", "riff", "pcm", "adpcm", "g711"]
 categories = ["multimedia::audio"]
-publish = false
+exclude = ["native/", ".github/"]
 autobenches = false
 
 [features]
@@ -43,5 +43,5 @@ name = "wav"
 harness = false
 
 [package.metadata.docs.rs]
-all-features = true
+# Default features only — `bench-c` needs a C compiler and vendored dr_wav.
 rustdoc-args = ["--cfg", "docsrs"]

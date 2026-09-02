@@ -23,6 +23,7 @@ native sample rate.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Slogan is **just wav**. Not a family prefix.
+  Published on crates.io (`ryf = "0.3"`).
 
 ## How it runs
 

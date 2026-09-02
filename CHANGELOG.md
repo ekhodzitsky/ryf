@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Read + Write + Seek` and auto-promotes RIFF → RF64 like `encode`.
 - Crate rustdoc is the API, not the GitHub README.
 - README is the ingest job (untrusted / telephony WAVE → planar `f32`);
-  `read` vs `read_speech` is on the first screen. Install pins `tag = "v0.3.0"`.
+  `read` vs `read_speech` is on the first screen. Published on crates.io.
 
 ### Removed
 

@@ -8,6 +8,8 @@ Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, MS/IMA ADPCM, wild
 headers. Write RIFF PCM 8/16/24/32 + IEEE f32; **RF64** when `u32`
 overflows.
 
+[![crates.io](https://img.shields.io/crates/v/ryf.svg)](https://crates.io/crates/ryf)
+[![docs.rs](https://img.shields.io/docsrs/ryf)](https://docs.rs/ryf)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![rustc](https://img.shields.io/badge/rustc-1.88+-lightgrey.svg)](Cargo.toml)
 [![deps](https://img.shields.io/badge/deps-zero-success.svg)](Cargo.toml)
@@ -52,11 +54,10 @@ In-memory: `decode_bytes`. Headerless µ-law/A-law: `decode_g711`.
 
 ```toml
 [dependencies]
-ryf = { git = "https://github.com/ekhodzitsky/ryf", tag = "v0.3.0" }
+ryf = "0.3"
 ```
 
-rustc **1.88**. Not on crates.io (`publish = false`). Default features
-(`adpcm` + `simd`) pull **no crates**.
+rustc **1.88**. Default features (`adpcm` + `simd`) pull **no crates**.
 
 ## Speed
 
