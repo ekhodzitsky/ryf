@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ffmpeg oracle: NaN payloads compare equal (Linux CI vs ffmpeg f32).
 - G.711 collect/stream coverage (slice + cursor) so llvm-cov stays ≥ 90%.
+- Crate summary names RF64 write (README lede, `Cargo.toml` description).
 
 ## [0.2.1] - 2026-09-02
 

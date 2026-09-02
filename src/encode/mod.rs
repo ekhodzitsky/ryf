@@ -16,7 +16,7 @@ mod writer;
 use header::{frame_bytes, needs_rf64, push_header, push_rf64_header, u32_len, validate_spec};
 pub use writer::WavWriter;
 
-/// Sample format written as classic little-endian RIFF.
+/// Sample format written as little-endian WAVE (RIFF or RF64).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteFormat {
     /// Unsigned 8-bit PCM.
@@ -60,7 +60,7 @@ impl WriteFormat {
     }
 }
 
-/// Classic-RIFF write parameters.
+/// WAVE write parameters (RIFF, or RF64 when sizes overflow).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WriteSpec {
     pub sample_rate: u32,

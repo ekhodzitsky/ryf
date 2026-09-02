@@ -3,9 +3,9 @@
 just wav.
 
 Pure-Rust **WAVE family** codec. Zero crates on the default feature set.
-Read RIFF / RIFX / RF64 / BW64 / Sony Wave64. Write classic RIFF PCM
-8/16/24/32 and IEEE f32. Output is planar `f32` at the file's native sample
-rate.
+Read RIFF / RIFX / RF64 / BW64 / Sony Wave64. Write RIFF PCM 8/16/24/32 and
+IEEE f32 (RF64 when `u32` sizes overflow). Output is planar `f32` at the
+file's native sample rate.
 
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![rustc](https://img.shields.io/badge/rustc-1.88+-lightgrey.svg)](Cargo.toml)

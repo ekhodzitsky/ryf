@@ -1,4 +1,4 @@
-//! Classic RIFF headers for integer PCM and IEEE f32.
+//! RIFF and RF64 headers for integer PCM and IEEE f32.
 
 use super::{WriteFormat, WriteSpec};
 use crate::error::{Result, WavError};
