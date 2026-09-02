@@ -10,6 +10,7 @@ overflows.
 
 [![crates.io](https://img.shields.io/crates/v/ryf.svg)](https://crates.io/crates/ryf)
 [![docs.rs](https://img.shields.io/docsrs/ryf)](https://docs.rs/ryf)
+[![ci](https://github.com/ekhodzitsky/ryf/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/ryf/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 [![rustc](https://img.shields.io/badge/rustc-1.88+-lightgrey.svg)](Cargo.toml)
 [![deps](https://img.shields.io/badge/deps-zero-success.svg)](Cargo.toml)
