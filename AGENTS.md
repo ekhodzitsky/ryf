@@ -1,4 +1,4 @@
-# ryf — Agent Guide
+# ryf - Agent Guide
 
 Just wav.
 
@@ -15,8 +15,8 @@ native sample rate.
 - No clap, tokio, anyhow, tracing, thiserror, hound, symphonia, wavers on
   the **product** path. `hound`, `symphonia`, `wavers`, and `criterion` are
   **dev-only** bench competitors. Optional `bench-c` vendors **dr_wav** (C)
-  via `cc` for Criterion only — never linked into the library.
-- Encode is PCM U8/S16/S24/S32 + IEEE f32, 1–26 ch: classic RIFF when it
+  via `cc` for Criterion only - never linked into the library.
+- Encode is PCM U8/S16/S24/S32 + IEEE f32, 1-26 ch: classic RIFF when it
   fits, RF64 when it does not (`encode_rf64` / `WavWriter::new_rf64` to
   force). Molv drop-in `encode_s16` (mono) / `encode_f32` / `write_s16`.
   No ADPCM/RIFX write.
@@ -32,7 +32,7 @@ cargo test
 cargo test --doc
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
-# impl-only line coverage (exclude sibling tests); target ≥ 90%
+# impl-only line coverage (exclude sibling tests); target >= 90%
 cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only -- --skip proptest
 cargo bench --bench wav
 cargo bench --bench wav --features bench-c   # vs dr_wav; needs a C compiler
@@ -59,7 +59,8 @@ Caps: `DecodeOptions::default()` is `unbounded` + split;
 
 - No `unwrap` / `expect` in library modules. Tests may still have harvest
   `unwrap`; convert them to `?` when touching a test file.
-- English for comments, docs, commits.
+- English for comments, docs, commits. Documentation is ASCII only
+  (no arrows, em dashes, or similar).
 - Implementation `src/**/*.rs`: max 400 lines. Test files: max 500.
 - `lib.rs`: module tree + public re-exports only.
 - Tests live in sibling `*_tests.rs`.

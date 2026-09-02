@@ -6,7 +6,7 @@ use crate::source::ByteSource;
 
 /// Own decoder via the public dispatched entry point.
 pub fn own_mono(data: &[u8]) -> Result<Vec<f32>> {
-    // Native-rate mono (no resample — resampling is a product concern).
+    // Native-rate mono (no resample - resampling is a product concern).
     own_mono_native(data).map(|(_, v)| v)
 }
 
@@ -58,7 +58,7 @@ pub fn ffmpeg_available() -> bool {
 }
 
 /// ffmpeg CLI oracle: decode the WAV bytes (written to a temp file) to
-/// native-rate f32le, deinterleaved per channel. PCM/µ-law/A-law/float
+/// native-rate f32le, deinterleaved per channel. PCM/mu-law/A-law/float
 /// WAV are lossless, so this is a bit-exact reference. Returns (rate,
 /// channels).
 pub fn ffmpeg_native_channels(label: &str, data: &[u8]) -> Result<(u32, Vec<Vec<f32>>)> {
@@ -138,7 +138,7 @@ pub fn assert_bit_exact(label: &str, a: &[f32], b: &[f32]) {
     );
     for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
         // ffmpeg canonicalizes NaN payloads (and sometimes the sign bit);
-        // we pass IEEE bits through. Both are NaN — not an audio mismatch.
+        // we pass IEEE bits through. Both are NaN - not an audio mismatch.
         if x.is_nan() && y.is_nan() {
             continue;
         }

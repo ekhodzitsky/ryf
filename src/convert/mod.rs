@@ -65,7 +65,7 @@ pub(crate) fn convert_s16_mono(src: &[u8], dst: &mut [f32]) {
     }
 }
 
-/// Interleaved LE s16 → mono f32. Same math as the historical mix:
+/// Interleaved LE s16 -> mono f32. Same math as the historical mix:
 /// convert each channel, then divide by `channels`.
 #[inline]
 pub(crate) fn mix_s16_le_to_f32(src: &[u8], dst: &mut [f32], channels: usize) {
@@ -78,7 +78,7 @@ pub(crate) fn mix_s16_le_to_f32(src: &[u8], dst: &mut [f32], channels: usize) {
     }
 }
 
-/// Interleaved LE s16 → planar f32 (`dst.len()` = channel count, equal lengths).
+/// Interleaved LE s16 -> planar f32 (`dst.len()` = channel count, equal lengths).
 #[inline]
 pub(crate) fn split_s16_le_to_f32(src: &[u8], dst: &mut [&mut [f32]]) {
     let channels = dst.len();
@@ -214,7 +214,7 @@ pub(crate) fn convert_f32_mono(src: &[u8], dst: &mut [f32]) {
     }
 }
 
-/// Little-endian host: copy 4× f32 bits via unaligned NEON load/store.
+/// Little-endian host: copy 4x f32 bits via unaligned NEON load/store.
 ///
 /// # Safety
 /// NEON is baseline on aarch64. `src`/`dst` need not be 16-byte aligned.
@@ -336,7 +336,7 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
 }
 
 /// Pack little-endian i16 with the decode scale (`* 32768`, then clamp to
-/// `i16`). `-1.0` → `-32768`, `1.0` → `32767`.
+/// `i16`). `-1.0` -> `-32768`, `1.0` -> `32767`.
 #[must_use]
 pub fn f32_to_s16le(samples: &[f32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(samples.len().saturating_mul(2));

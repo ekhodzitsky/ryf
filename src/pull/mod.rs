@@ -155,7 +155,7 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
         let actual_frames = data_len / frame_bytes as u64;
         // Duration follows *available* PCM. A lying `fact` / ds64 count that
         // is smaller still wins (W64 8-byte pad, RF64 leftovers). A lying
-        // *larger* count is ignored — TooLong is about bytes on disk, not
+        // *larger* count is ignored - TooLong is about bytes on disk, not
         // a header that claims three hours of a 10 s file.
         let frames = match header.declared_sample_count {
             // `fact` / ds64 sampleCount is samples per channel, not interleaved.
@@ -300,7 +300,7 @@ fn pcm_short(msg: &'static str) -> WavError {
     WavError::packet_io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, msg))
 }
 
-/// `f32` is `Copy` — dropping a partially-filled buffer is safe.
+/// `f32` is `Copy` - dropping a partially-filled buffer is safe.
 fn uninit_f32_vec(n: usize) -> Vec<f32> {
     let mut v = Vec::with_capacity(n);
     #[allow(clippy::uninit_vec)]

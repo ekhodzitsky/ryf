@@ -75,7 +75,7 @@ fn test_diff_matrix_bit_exact() -> Result<()> {
 fn test_diff_packet_boundary_crossing() -> Result<()> {
     // More frames than symphonia's 1152-frames-per-packet, so the
     // symphonia path decodes several packets while the in-tree decoder
-    // reads its own blocks — output must still match bit-exactly.
+    // reads its own blocks - output must still match bit-exactly.
     let mut rng = XorShift64::new(0xABCD_EF01_2345_6789);
     for (codec, rate, ch) in [
         (TestCodec::S16, 48000u32, 2u16),
@@ -226,7 +226,7 @@ fn test_diff_s32_sweep() -> Result<()> {
 #[cfg_attr(miri, ignore = "differential sweeps are too slow under Miri")]
 fn test_diff_float_random_bit_patterns() -> Result<()> {
     // Random raw bit patterns (incl. NaN payloads, infinities,
-    // subnormals) — conversion must agree bit-exactly on every pattern.
+    // subnormals) - conversion must agree bit-exactly on every pattern.
     let mut rng = XorShift64::new(0xF32F_32F3_2F32_F32F);
     let payload = gen_payload(TestCodec::F32, &mut rng, 10_000, 1);
     let wav = WavBuilder {
@@ -284,7 +284,7 @@ fn test_diff_g711_extensible_valid16() -> Result<()> {
     // The one extensible g711 form the old symphonia pipeline decoded:
     // valid_bits == 16 (its decoder demands the stated width equal the
     // 16-bit decoded width). Nonsensical per the WAV spec, but kept for
-    // parity. ffmpeg rejects extensible µ-law/A-law outright, so the
+    // parity. ffmpeg rejects extensible mu-law/A-law outright, so the
     // gate is self-consistency: the extensible parse must yield the same
     // samples as the plain form (itself gated vs ffmpeg in the sweeps).
     for codec in [TestCodec::ALaw, TestCodec::MuLaw] {
@@ -322,9 +322,9 @@ fn test_diff_odd_size_chunks_and_padding() -> Result<()> {
     let payload = gen_payload(TestCodec::S16, &mut rng, 500, 2);
     let wav = WavBuilder {
         channels: 2,
-        chunks_before_fmt: vec![(*b"JUNK", vec![0xAA; 5])], // odd length → pad byte
+        chunks_before_fmt: vec![(*b"JUNK", vec![0xAA; 5])], // odd length -> pad byte
         chunks_before_data: vec![
-            (*b"bext", vec![0xBB; 101]), // odd length → pad byte
+            (*b"bext", vec![0xBB; 101]), // odd length -> pad byte
             (*b"cue ", vec![0xCC; 24]),
         ],
         payload,
@@ -419,7 +419,7 @@ fn test_diff_ieee_fmt_len_18() -> Result<()> {
     assert_bit_exact_both_modes("ieee fmt len 18", &file);
     // cbSize != 0 must be rejected by both.
     let mut bad = file.clone();
-    bad[36] = 1; // cbSize field → 1
+    bad[36] = 1; // cbSize field -> 1
     assert_both_err("ieee fmt len 18 cbSize=1", &bad);
     Ok(())
 }

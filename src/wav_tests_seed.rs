@@ -20,7 +20,7 @@ fn test_diff_chunk_len_exceeds_riff_parent() {
 #[test]
 fn test_diff_file_backed_decode_paths() -> Result<()> {
     // `decode_audio_file` / `load_audio_channels` use a File-backed
-    // ByteSource (vs the in-memory Bytes one) — the sniff, chunk walk,
+    // ByteSource (vs the in-memory Bytes one) - the sniff, chunk walk,
     // and clamping must behave identically on both sources.
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(83), 1000, 2);
     let wav = WavBuilder {
@@ -52,7 +52,7 @@ fn test_diff_file_backed_decode_paths() -> Result<()> {
 }
 
 #[test]
-#[cfg_attr(miri, ignore = "decodes real speech files — too slow under Miri")]
+#[cfg_attr(miri, ignore = "decodes real speech files - too slow under Miri")]
 fn test_diff_golos_fixtures_bit_exact() -> Result<()> {
     // Optional real-speech corpus from the product test fixtures
     // (sibling crate). No serde: just every `.wav` in the fixtures dir.
@@ -349,7 +349,7 @@ pub fn build_w64_s16_seed() -> Vec<u8> {
 
 /// Minimal well-formed MS-ADPCM mono (one block of silence-ish coeffs).
 pub fn build_ms_adpcm_minimal_seed() -> Vec<u8> {
-    // block_align=256, samples_per_block ≈ 500, 7 default coefs.
+    // block_align=256, samples_per_block ~ 500, 7 default coefs.
     let block_align = 256u16;
     let samples_per_block = 500u16;
     let mut fmt = Vec::new();

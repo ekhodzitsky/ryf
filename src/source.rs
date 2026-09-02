@@ -75,7 +75,7 @@ impl<'a> ByteSource<'a> {
         }
     }
 
-    /// Owned in-memory buffer (contiguous view — same zero-copy PCM path as
+    /// Owned in-memory buffer (contiguous view - same zero-copy PCM path as
     /// [`from_slice`]).
     pub fn from_vec(data: Vec<u8>) -> ByteSource<'static> {
         let len = data.len() as u64;

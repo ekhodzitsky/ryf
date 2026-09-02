@@ -2,7 +2,7 @@
 
 Just wav.
 
-Untrusted or telephony **WAVE** → planar `f32` in-process. Zero crates on
+Untrusted or telephony **WAVE** -> planar `f32` in-process. Zero crates on
 the default feature set, no C in the binary, no ffmpeg, no resample.
 Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, MS/IMA ADPCM, wild
 headers. Write RIFF PCM 8/16/24/32 + IEEE f32; **RF64** when `u32`
@@ -16,7 +16,7 @@ overflows.
 [![deps](https://img.shields.io/badge/deps-zero-success.svg)](Cargo.toml)
 
 **For:** speech ingest, phone recordings, user `.wav` uploads that
-[hound](https://github.com/ruuda/hound) will not open (µ-law, ADPCM, RF64,
+[hound](https://github.com/ruuda/hound) will not open (mu-law, ADPCM, RF64,
 broken `fmt`). **Not for:** a player, a DAW, FLAC/MP3, resampling to 16 kHz.
 
 [hound](https://github.com/ruuda/hound) is PCM/IEEE RIFF.
@@ -26,9 +26,9 @@ Matrix: [compare](docs/compare.md).
 
 ## Read
 
-`read` / `decode_bytes` — one plane per channel, archival caps.
+`read` / `decode_bytes` - one plane per channel, archival caps.
 
-`read_speech` / `DecodeOptions::speech()` — **mix to mono**, 2 h / 192 kHz /
+`read_speech` / `DecodeOptions::speech()` - **mix to mono**, 2 h / 192 kHz /
 4 GiB. Use this for STT or untrusted upload.
 
 ```rust
@@ -44,12 +44,12 @@ fn main() -> ryf::Result<()> {
 }
 ```
 
-In-memory: `decode_bytes`. Headerless µ-law/A-law: `decode_g711`.
+In-memory: `decode_bytes`. Headerless mu-law/A-law: `decode_g711`.
 `impl Read` without seek: `decode_reader`. Write: `encode` / `write_s16` /
 `WavWriter`.
 
-[read](docs/read.md) · [write](docs/write.md) · [api](docs/api.md) ·
-[benchmarks](docs/benchmarks.md) · [correctness](docs/correctness.md)
+[read](docs/read.md) | [write](docs/write.md) | [api](docs/api.md)  | 
+[benchmarks](docs/benchmarks.md) | [correctness](docs/correctness.md)
 
 ## Install
 
@@ -62,10 +62,10 @@ rustc **1.88**. Default features (`adpcm` + `simd`) pull **no crates**.
 
 ## Speed
 
-Apple Silicon (aarch64, NEON), 2 s @ 16 kHz **in-memory** RIFF → mixed
+Apple Silicon (aarch64, NEON), 2 s @ 16 kHz **in-memory** RIFF -> mixed
 planar f32. Linux x86 / SSE not measured.
-PCM16 mono: **3.78 µs** vs dr_wav 16.3 µs (**4.3×**) / wavers 18.5 (**4.9×**) /
-Symphonia 102 (**27×**) / hound 186 (**49×**). Encode s16 is a **tie** with
+PCM16 mono: **3.78 mus** vs dr_wav 16.3 mus (**4.3x**) / wavers 18.5 (**4.9x**) /
+Symphonia 102 (**27x**) / hound 186 (**49x**). Encode s16 is a **tie** with
 dr_wav. Cache-hot clip, not a file on disk.
 [docs/benchmarks.md](docs/benchmarks.md).
 

@@ -160,8 +160,8 @@ pub(crate) const WAVE_FORMAT_ADPCM_IMA: u16 = 0x0011;
 pub(crate) const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
 
 /// SubFormat GUIDs for WAVE_FORMAT_EXTENSIBLE (ksmedia.h), in on-disk byte
-/// order. The µ-law subtype tag is 0x04 in the GUID form even though the
-/// plain format tag is 0x0007 — kept identical to the historical demuxer.
+/// order. The mu-law subtype tag is 0x04 in the GUID form even though the
+/// plain format tag is 0x0007 - kept identical to the historical demuxer.
 #[rustfmt::skip]
 pub(crate) const KSDATAFORMAT_SUBTYPE_PCM: [u8; 16] = [
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,

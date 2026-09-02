@@ -7,8 +7,8 @@ Every listed codec is accepted in every listed container unless noted.
 | PCM u8 / s16 / s24 / s32 | yes | yes | yes | yes |
 | S24 in 4-byte containers | yes | yes | yes | yes |
 | IEEE f32 / f64 | yes | yes | yes | yes |
-| G.711 A-law / µ-law | yes | yes | yes | yes |
-| MS-ADPCM, IMA/DVI ADPCM | yes | — | yes | yes |
+| G.711 A-law / mu-law | yes | yes | yes | yes |
+| MS-ADPCM, IMA/DVI ADPCM | yes | - | yes | yes |
 
 Also:
 

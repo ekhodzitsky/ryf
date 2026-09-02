@@ -1,11 +1,11 @@
 [package]
 name = "ryf"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 authors = ["Evgeny Khodzitsky"]
-description = "Just wav. Pure-Rust WAVE family ingest: RIFF/RIFX/RF64/BW64/Wave64, G.711, ADPCM → planar f32. Zero default deps."
+description = "Just wav. Pure-Rust WAVE family ingest: RIFF/RIFX/RF64/BW64/Wave64, G.711, ADPCM -> planar f32. Zero default deps."
 readme = "README.md"
 repository = "https://github.com/ekhodzitsky/ryf"
 homepage = "https://github.com/ekhodzitsky/ryf"
@@ -19,13 +19,13 @@ autobenches = false
 default = ["adpcm", "simd"]
 # Microsoft + IMA/DVI ADPCM (0x0002 / 0x0011).
 adpcm = []
-# NEON (aarch64) + SSE4.1/SSE2 (x86) s16→f32 convert kernels.
+# NEON (aarch64) + SSE4.1/SSE2 (x86) s16->f32 convert kernels.
 simd = []
 # Vendored dr_wav (C) for Criterion only. Needs a C compiler. Not product path.
 bench-c = ["dep:cc"]
 
 [dependencies]
-# Intentionally empty — pure std.
+# Intentionally empty - pure std.
 
 [build-dependencies]
 cc = { version = "1", optional = true }
@@ -43,5 +43,5 @@ name = "wav"
 harness = false
 
 [package.metadata.docs.rs]
-# Default features only — `bench-c` needs a C compiler and vendored dr_wav.
+# Default features only - `bench-c` needs a C compiler and vendored dr_wav.
 rustdoc-args = ["--cfg", "docsrs"]

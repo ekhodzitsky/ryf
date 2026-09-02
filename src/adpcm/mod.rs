@@ -56,7 +56,7 @@ pub(super) fn clamp_i16(v: i32) -> i16 {
 }
 
 /// Walk MS-ADPCM blocks and invoke `on_block` with interleaved i16 (one
-/// compressed block at a time — no full-stream i16 allocation).
+/// compressed block at a time - no full-stream i16 allocation).
 pub(crate) fn for_each_ms_adpcm_block(
     mss: &mut ByteSource<'_>,
     params: &MsAdpcmParams,

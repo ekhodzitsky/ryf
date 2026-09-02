@@ -275,7 +275,7 @@ impl WavBuilder {
                     _ => unreachable!("test builder: pcm_fmt_len must be 16/18/40"),
                 },
                 WAVE_FORMAT_ALAW | WAVE_FORMAT_MULAW => {
-                    // cbSize = 0 → canonical 18-byte g711 fmt chunk.
+                    // cbSize = 0 -> canonical 18-byte g711 fmt chunk.
                     v.extend_from_slice(&0u16.to_le_bytes());
                 }
                 _ => {} // IEEE float: canonical 16 bytes

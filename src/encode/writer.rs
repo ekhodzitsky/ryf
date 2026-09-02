@@ -68,7 +68,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         })
     }
 
-    /// Append interleaved PCM bytes (`format` width × channels per frame).
+    /// Append interleaved PCM bytes (`format` width x channels per frame).
     pub fn write_pcm(&mut self, pcm: &[u8]) -> Result<()> {
         if self.finalized {
             return Err(WavError::format(FormatKind::InvalidOperation));

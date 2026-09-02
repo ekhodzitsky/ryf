@@ -21,7 +21,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         b
     };
     if head16 == W64_GUID_RIFF {
-        // Rewind already consumed 16 — still at offset 16; W64 path continues.
+        // Rewind already consumed 16 - still at offset 16; W64 path continues.
         return parse_header_w64(mss);
     }
     // Classic fourcc containers: rewind to 0 and re-parse from the start.
@@ -86,7 +86,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         let chunk_len_u32 = read_u32_endian(mss, be)?;
         consumed += 8;
 
-        // RF64: data/LIST chunk sizes may be 0xFFFFFFFF → real size in ds64 table
+        // RF64: data/LIST chunk sizes may be 0xFFFFFFFF -> real size in ds64 table
         // (we only promote `data` via ds64.dataSize for product needs).
         let chunk_len = u64::from(chunk_len_u32);
 
@@ -104,7 +104,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
 
         match &tag {
             b"ds64" => {
-                // EBU Tech 3306: riffSize, dataSize, sampleCount, tableLength, …
+                // EBU Tech 3306: riffSize, dataSize, sampleCount, tableLength, ...
                 if chunk_len < 28 {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
@@ -127,7 +127,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                     mss.ignore_bytes(rest - skip)?;
                 }
                 // riffSize is the size of the RF64 chunk body after the first 8 bytes,
-                // i.e. same meaning as RIFF chunk size field → data after form is riffSize-4.
+                // i.e. same meaning as RIFF chunk size field -> data after form is riffSize-4.
                 if riff_size >= 4 {
                     riff_data_len = Some(riff_size - 4);
                 }
@@ -149,7 +149,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             }
             b"fact" => {
                 // Canonical fact is exactly 4 bytes (sample count). Longer
-                // facts exist in some RF64 toolchains — accept >= 4 and skip
+                // facts exist in some RF64 toolchains - accept >= 4 and skip
                 // the surplus; shorter is malformed.
                 if chunk_len < 4 {
                     return Err(WavError::format(FormatKind::MalformedChunk));

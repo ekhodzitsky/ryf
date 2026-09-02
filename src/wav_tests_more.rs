@@ -102,7 +102,7 @@ fn test_rifx_f32_and_s24_mono() -> Result<()> {
 
 #[test]
 fn test_w64_fact_and_odd_payload_pad() -> Result<()> {
-    // 3 s16 samples → 6 data bytes, pad to 8.
+    // 3 s16 samples -> 6 data bytes, pad to 8.
     let samples = [10i16, -10, 20];
     let mut payload = Vec::new();
     for &s in &samples {
@@ -193,7 +193,7 @@ fn test_split_output_ram_budget() {
         ..WavBuilder::new(TestCodec::S16)
     }
     .build();
-    // 2 ch × 1000 frames × 4 bytes = 8000; budget 1000 → reject.
+    // 2 ch x 1000 frames x 4 bytes = 8000; budget 1000 -> reject.
     let opts = crate::DecodeOptions::default()
         .with_channel_mode(ChannelMode::Split)
         .with_max_output_bytes(1000);
@@ -435,7 +435,7 @@ fn test_output_too_large_mono() {
         ..WavBuilder::new(TestCodec::S16)
     }
     .build();
-    // 500 frames × 4 bytes = 2000.
+    // 500 frames x 4 bytes = 2000.
     let opts = crate::DecodeOptions::default().with_max_output_bytes(100);
     let err = crate::decode_bytes(&wav, opts).expect_err("RAM cap mono");
     assert!(

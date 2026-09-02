@@ -6,7 +6,7 @@ fn test_diff_extensible_valid_bits() -> Result<()> {
     // valid < bits is accepted and ignored (the in-tree decoder decodes
     // the full container width, as the old symphonia pipeline did).
     // Recorded: ffmpeg instead respects valid_bits and zeroes the low
-    // bits, so it cannot gate here — the gate is self-consistency with
+    // bits, so it cannot gate here - the gate is self-consistency with
     // the no-valid-bits form.
     for (codec, valid) in [
         (TestCodec::S24, 20u16),

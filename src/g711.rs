@@ -11,7 +11,7 @@ use crate::{ChannelMode, DecodedWav};
 pub enum G711Law {
     /// A-law (PCMA).
     ALaw,
-    /// µ-law (PCMU).
+    /// mu-law (PCMU).
     MuLaw,
 }
 
@@ -92,7 +92,7 @@ pub fn decode_g711_alaw(data: &[u8], sample_rate: u32) -> Result<DecodedWav> {
     )
 }
 
-/// Headerless µ-law, mono, [`DecodeOptions::speech`].
+/// Headerless mu-law, mono, [`DecodeOptions::speech`].
 pub fn decode_g711_mulaw(data: &[u8], sample_rate: u32) -> Result<DecodedWav> {
     decode_g711(
         data,

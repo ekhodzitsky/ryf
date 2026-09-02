@@ -8,7 +8,7 @@
 - `unsafe` is confined to `convert/simd.rs`, G.711 `u8` table lookup, and
   uninit `f32` scratch (Copy, every element written before `Ok`); each
   block has a SAFETY comment.
-- CI: Ubuntu (ffmpeg oracle), macOS, Windows. Impl line coverage ≥ 90%.
+- CI: Ubuntu (ffmpeg oracle), macOS, Windows. Impl line coverage >= 90%.
 - Speed peers and other WAVE crates: [compare.md](compare.md),
   [benchmarks.md](benchmarks.md).
 

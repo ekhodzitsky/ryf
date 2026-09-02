@@ -165,8 +165,8 @@ fn container_width_and_pcm_codec_edges() {
     assert!(container_width(2, 1, 0).is_err());
     assert!(container_width(2, 1, 72).is_err());
     assert_eq!(container_width(0, 1, 16).unwrap_or(0), 2);
-    assert_eq!(container_width(3, 2, 16).unwrap_or(0), 2); // not multiple → packed
-    assert_eq!(container_width(16, 1, 16).unwrap_or(0), 2); // w>8 → packed
+    assert_eq!(container_width(3, 2, 16).unwrap_or(0), 2); // not multiple -> packed
+    assert_eq!(container_width(16, 1, 16).unwrap_or(0), 2); // w>8 -> packed
     assert!(pcm_codec_for(12, 2).is_err());
     assert!(pcm_codec_for(16, 1).is_err());
 }

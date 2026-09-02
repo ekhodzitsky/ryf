@@ -27,7 +27,7 @@ corrupt header cannot request petabytes from one multiply.
 | Feature | Default | Effect |
 |---|---|---|
 | `adpcm` | yes | MS + IMA/DVI ADPCM (`0x0002` / `0x0011`) |
-| `simd` | yes | NEON (aarch64) + SSE (x86) s16→f32, stereo mix/split, f32 copy. Bit-exact with the scalar kernels. |
+| `simd` | yes | NEON (aarch64) + SSE (x86) s16->f32, stereo mix/split, f32 copy. Bit-exact with the scalar kernels. |
 | `bench-c` | no | Vendored dr_wav for Criterion. Needs a C compiler. **Not** used by the library. |
 
 Default features pull **no crates**.

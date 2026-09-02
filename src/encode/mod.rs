@@ -1,4 +1,4 @@
-//! WAVE encode: integer PCM 8/16/24/32, IEEE f32, 1–26 channels.
+//! WAVE encode: integer PCM 8/16/24/32, IEEE f32, 1-26 channels.
 //!
 //! Classic RIFF when it fits; RF64 when the payload would overflow a `u32`
 //! size, or via [`encode_rf64`]. Drop-in molv path: [`encode_s16`] (mono) /
@@ -173,7 +173,7 @@ pub fn write_s16(path: &Path, pcm: &[u8], sample_rate: u32) -> Result<()> {
     write(path, WriteSpec::s16(sample_rate, 1), pcm)
 }
 
-/// Write interleaved IEEE f32 WAVE (1–26 channels).
+/// Write interleaved IEEE f32 WAVE (1-26 channels).
 pub fn write_f32(path: &Path, samples: &[f32], sample_rate: u32, channels: u16) -> Result<()> {
     let bytes = encode_f32(samples, sample_rate, channels)?;
     let mut f = File::create(path)?;

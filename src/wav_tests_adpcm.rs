@@ -95,7 +95,7 @@ fn test_adpcm_ffmpeg_files_smoke() {
     }
 }
 
-/// ADPCM: max |Δ| vs ffmpeg f32 oracle stays within a few LSBs of s16.
+/// ADPCM: max |delta| vs ffmpeg f32 oracle stays within a few LSBs of s16.
 /// ADPCM is lossy and implementers differ slightly; we gate on a tight
 /// absolute error rather than bit-exact equality.
 #[cfg(feature = "adpcm")]
@@ -117,7 +117,7 @@ fn test_adpcm_ffmpeg_max_abs_parity() -> Result<()> {
         let (rate_f, ff_ch) = ffmpeg_native_channels(path, &data)?;
         assert_eq!(rate_o, rate_f, "{path} rate");
         let ff = mix_mono(&ff_ch);
-        // Allow small length skew from block padding (≤ one ADPCM block).
+        // Allow small length skew from block padding (<= one ADPCM block).
         let n = own.len().min(ff.len());
         assert!(n > 100, "{path}: too short");
         let len_delta = own.len().abs_diff(ff.len());
@@ -131,17 +131,17 @@ fn test_adpcm_ffmpeg_max_abs_parity() -> Result<()> {
         for i in 0..n {
             max_abs = max_abs.max((own[i] - ff[i]).abs());
         }
-        // ~3/32768 ≈ 9e-5; allow headroom for predictor state drift.
+        // ~3/32768 ~ 9e-5; allow headroom for predictor state drift.
         assert!(
             max_abs < 5e-3,
-            "{path}: max |Δ|={max_abs} exceeds 5e-3 vs ffmpeg"
+            "{path}: max |delta|={max_abs} exceeds 5e-3 vs ffmpeg"
         );
     }
     Ok(())
 }
 
 /// Offline micro-bench (no Criterion / no network): prints ns/sample for
-/// the s16→f32 kernel. Run with:
+/// the s16->f32 kernel. Run with:
 /// `cargo test test_microbench_s16_convert -- --ignored --nocapture`
 #[test]
 #[ignore = "micro-bench: run explicitly with --ignored --nocapture"]
@@ -167,7 +167,7 @@ fn test_microbench_s16_convert() -> Result<()> {
     let elapsed = t0.elapsed();
     let ns_per_sample = elapsed.as_nanos() as f64 / (iters as f64 * frames as f64);
     eprintln!(
-        "s16→f32: {ns_per_sample:.3} ns/sample  ({frames} frames × {iters} iters, {elapsed:?})"
+        "s16->f32: {ns_per_sample:.3} ns/sample  ({frames} frames x {iters} iters, {elapsed:?})"
     );
     assert!(dst.iter().any(|&x| x != 0.0));
     Ok(())
@@ -175,7 +175,7 @@ fn test_microbench_s16_convert() -> Result<()> {
 
 #[test]
 fn test_convert_s16_mono_matches_scalar_reference() {
-    // Every i16 codepoint step — including extremes — must match the
+    // Every i16 codepoint step - including extremes - must match the
     // historical scalar formula even when NEON is active.
     let mut src = Vec::with_capacity(512 * 2);
     let mut expect = Vec::with_capacity(512);

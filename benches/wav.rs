@@ -9,7 +9,7 @@
 //! `f32`, then the same mix; sequential memory write for encode.
 //!
 //! ffmpeg is a **correctness oracle**, not a speed peer (process spawn).
-//! Symphonia does not encode. wavers encode is path-only — not in this bench.
+//! Symphonia does not encode. wavers encode is path-only - not in this bench.
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;

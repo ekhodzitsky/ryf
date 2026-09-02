@@ -194,7 +194,7 @@ pub(super) fn parse_fmt_chunk(
                     format_tag: format,
                 })
             } else {
-                // WAVE_FORMAT_ADPCM_IMA — outer match is MS | IMA.
+                // WAVE_FORMAT_ADPCM_IMA - outer match is MS | IMA.
                 if extra_size != 2 {
                     return Err(WavError::format(FormatKind::MalformedFmt));
                 }

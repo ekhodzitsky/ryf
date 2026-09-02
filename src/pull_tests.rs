@@ -8,7 +8,7 @@ use crate::source::ByteSource;
 #[test]
 fn block_and_duration_helpers() {
     assert_eq!(block_frames_for(2), (1 << 18) / 2);
-    // frame_bytes 0 is clamped to 1 → full 256 KiB block.
+    // frame_bytes 0 is clamped to 1 -> full 256 KiB block.
     assert_eq!(block_frames_for(0), 1 << 18);
     assert_eq!(scratch_frames(2, 10), 10);
     assert_eq!(scratch_frames(2, 0), 1);

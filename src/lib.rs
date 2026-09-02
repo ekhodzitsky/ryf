@@ -1,4 +1,4 @@
-//! Untrusted / telephony WAVE → planar `f32`.
+//! Untrusted / telephony WAVE -> planar `f32`.
 //!
 //! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
 //! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /

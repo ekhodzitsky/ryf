@@ -1,10 +1,10 @@
 //! Differential tests: this decoder must produce BIT-EXACT f32 output
 //! with the ffmpeg CLI decoder on every well-formed input
-//! (PCM/µ-law/A-law/float WAV are lossless). The ffmpeg oracle decodes
+//! (PCM/mu-law/A-law/float WAV are lossless). The ffmpeg oracle decodes
 //! through a temp file; per-channel output is mixed in-test with the
 //! same left-to-right sum / n arithmetic the decoder uses for
 //! [`ChannelMode::Mono`]. Comparison is at the file's native sample
-//! rate — product resampling (16 kHz) lives in `the consumer`.
+//! rate - product resampling (16 kHz) lives in `the consumer`.
 //!
 //! Documented, deliberate divergences from the old symphonia pipeline
 //! (malformed input only, Err-vs-Ok):
