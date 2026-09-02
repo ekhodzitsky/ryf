@@ -3,50 +3,104 @@
 ryf is a **WAVE family ingest** crate: messy containers, telephony codecs,
 planar `f32`, RAM/duration caps, **zero** default-feature deps.
 
-It is **not** a player (rodio/cpal), not a resample pipeline, not ffmpeg.
+It is **not** a player (rodio/cpal/miniaudio), not a resample pipeline, not
+ffmpeg. Product path is pure Rust. C is only an optional Criterion peer.
 
-## Speed peers (in-process, same bytes)
+## Timed (in-process, same bytes)
 
-These three are timed in [`benchmarks.md`](benchmarks.md) on the same
-classic RIFF clip (2 s @ 16 kHz → mixed planar `f32`).
+Same classic RIFF clip (2 s @ 16 kHz → mixed planar `f32`). Numbers:
+[benchmarks.md](benchmarks.md).
 
-| | [ryf](https://github.com/ekhodzitsky/ryf) | [hound](https://github.com/ruuda/hound) 3.5 | [symphonia](https://github.com/pdeljanov/Symphonia) 0.5 | [wavers](https://github.com/jmg049/wavers) 1.5 |
-|---|---|---|---|---|
-| Job | WAVE family ingest | PCM/IEEE RIFF iterator | multi-format demux | PCM/IEEE reader |
-| RIFF PCM / IEEE f32 | yes | yes | yes (`wav`+`pcm`) | yes |
-| RIFX / RF64 / BW64 / Wave64 | yes | no | limited | no |
-| G.711 | yes | no | yes | no |
-| MS / IMA ADPCM | yes (`adpcm`) | no | limited | no |
-| Write | RIFF + RF64 PCM + f32 | PCM/IEEE, extensible | **no** | PCM/IEEE (path) |
-| Default deps | **none** | none | several | several (`thiserror`, `bytemuck`, `i24`, …) |
-| Caps | yes | no | no | no |
-| Output | planar `f32` | typed sample iterator | decoded packets | typed `Samples<T>` |
-| In-memory encode bench | yes | yes | — | no (write is path-only) |
+| | [ryf](https://github.com/ekhodzitsky/ryf) | [hound](https://github.com/ruuda/hound) 3.5 | [symphonia](https://github.com/pdeljanov/Symphonia) 0.5 | [wavers](https://github.com/jmg049/wavers) 1.5 | [dr_wav](https://github.com/mackron/dr_libs) 0.14 |
+|---|---|---|---|---|---|
+| Lang | Rust | Rust | Rust | Rust | **C** (header-only) |
+| Job | WAVE family ingest | PCM/IEEE RIFF iterator | multi-format demux | PCM/IEEE reader | WAV load/write |
+| RIFF PCM / IEEE f32 | yes | yes | yes (`wav`+`pcm`) | yes | yes |
+| RIFX / RF64 / BW64 / Wave64 | yes | no | limited | no | RF64 + Wave64; not RIFX write |
+| G.711 | yes | no | yes | no | yes |
+| MS / IMA ADPCM | yes (`adpcm`) | no | limited | no | yes |
+| Write | RIFF + RF64 PCM + f32 | PCM/IEEE, extensible | **no** | PCM/IEEE (path) | PCM/IEEE/A-law/µ-law (no ADPCM write) |
+| Default deps | **none** | none | several | several | none (single `.h`) |
+| Caps | yes | no | no | no | no |
+| In harness | always | always | always | always | `--features bench-c` |
 
-hound is the default WAV crate (~1k reverse-deps). It stops at PCM/IEEE
-RIFF. Last release 2023.
+hound is the default WAV crate (~1k reverse-deps). PCM/IEEE RIFF only. Last
+release 2023.
 
-Symphonia is a media pipeline. The bench enables **only** `wav` + `pcm`,
-not the full default codec set. It does not encode.
+Symphonia is a media pipeline. The bench enables **only** `wav` + `pcm`.
+No encode.
 
-wavers is a later PCM/IEEE reader that advertises bulk SIMD conversion.
-Default build pulls extra crates. Encode is file-path API, so it is
-**decode-only** in our Criterion harness.
+wavers is a later PCM/IEEE reader (bulk SIMD convert). Author archived it in
+favour of [`audio_samples_io`](https://crates.io/crates/audio_samples_io).
+Encode is file-path API — **decode-only** in Criterion.
 
-## Oracle, not a speed peer
+**dr_wav** is the C speed king for this job: public domain / MIT-0, one
+header, memory in/out. Vendored at `native/dr_wav.h` (mackron/dr_libs
+`dfe8377`, v0.14.6) and compiled only with `bench-c`. Not on the product
+path. Decode: `drwav_open_memory_and_read_pcm_frames_f32`. Encode:
+`drwav_init_memory_write_sequential_pcm_frames`.
 
-**ffmpeg** is the bit-exact `f32` oracle on lossless PCM / G.711 when
-present on `PATH`. It is a subprocess, not a library. Not timed.
+## C / C++ (not all timed)
 
-## Other WAVE crates (not timed)
+| Library | Why it is (not) in the harness |
+|---|---|
+| **dr_wav** | Timed. See above. |
+| [libsndfile](https://github.com/libsndfile/libsndfile) | Industry WAV/AIFF/FLAC/… I/O (LGPL). System lib + pkg-config; skipped so CI stays green with no C toolchain on the default path. |
+| [miniaudio](https://github.com/mackron/miniaudio) | Device I/O + decoder. The WAV backend **is** dr_wav. Timing miniaudio would re-time dr_wav plus a player. |
+| **ffmpeg** `libavformat` / `libavcodec` | Correctness **oracle** (subprocess on `PATH`). Not a library dep, not timed. |
+| [AudioFile.h](https://github.com/adamstark/AudioFile) (C++) | Header-only PCM/IEEE. Same niche as hound; not in-process from Rust without another FFI. |
+| JUCE / Qt Multimedia | App frameworks. Qt vendors dr_wav. |
 
-| Crate | Why it is not in the harness |
+## Other languages (not timed)
+
+In-process Criterion is Rust↔C. These are documented, not raced:
+
+| Runtime | Typical WAV stack | Notes vs ryf |
+|---|---|---|
+| Python | `wave` (stdlib, PCM), `scipy.io.wavfile`, `soundfile` (libsndfile) | GC + C backend. `soundfile` **is** libsndfile. |
+| Go | `go-audio/wav`, `youpy/go-wav` | PCM/IEEE RIFF. No family codecs. |
+| JS / TS | `wavefile`, Web Audio `decodeAudioData` | Browser/node. Not a Unix ingest crate. |
+| C# | NAudio, CSCore | Windows-first. |
+| Java | `javax.sound.sampled` | PCM RIFF. |
+
+## Other Rust WAVE crates (not timed)
+
+PCM/IEEE RIFF readers — same job as hound/wavers, not a family codec:
+
+| Crate | Why not in the harness |
 |---|---|
 | [`wav`](https://crates.io/crates/wav) 1.0 | **Deprecated**; author says use hound. PCM only. LGPL. |
-| [`wav_io`](https://crates.io/crates/wav_io) | Small PCM utility. Not a family codec. |
-| [`rustwav`](https://crates.io/crates/rustwav) | Kitchen-sink (MP3/Opus/FLAC + resample). Custom license, many deps. Different product. |
-| rodio | Playback. Decodes via hound/symphonia. |
-| cpal | Host audio I/O, not a WAVE codec. |
+| [`wav-codec`](https://crates.io/crates/wav-codec) 0.1 | New zero-dep PCM/IEEE iterator. No G.711/ADPCM/RF64. |
+| [`wav_io`](https://crates.io/crates/wav_io) | PCM utility + resample + silence split. Different product. |
+| [`riff-wave`](https://crates.io/crates/riff-wave) | Canonical PCM only. 2016–2022. |
+| [`waveadapter`](https://crates.io/crates/waveadapter) | CamillaDSP-style container → `audioadapter` buffers. A-law/ADPCM round-trip as **raw bytes**, not decoded. |
+| [`nwav`](https://crates.io/crates/nwav) | `no_std` **metadata** parser (~100 lines). Not a codec. |
+| [`pure_wav`](https://crates.io/crates/pure_wav) | `no_std` header walker. AGPL. Not a codec. |
+| [`rezin-wav`](https://crates.io/crates/rezin-wav) | Zero-dep PCM 16/24 → `i32` stream. No f32, no telephony. |
+| [`pacmog`](https://crates.io/crates/pacmog) | Embedded `include_bytes!` PCM/IMA player. MCU, not ingest. |
 
-If a crate is a WAV **library** aimed at PCM RIFF, it belongs in the
-speed table or in this list with a reason. Gaps: open an issue.
+WAVE-family or multi-format (overlap, different product):
+
+| Crate | Why not in the harness |
+|---|---|
+| [`audio_samples_io`](https://crates.io/crates/audio_samples_io) | Successor of wavers. WAV (RF64/BW64) + FLAC + AIFF. Path / `Read+Seek`. Extra crates (`audio_samples`, …). |
+| [`bwavfile`](https://crates.io/crates/bwavfile) | Broadcast-WAV / RF64 / iXML / ADM. Film metadata, not G.711/ADPCM. Last release 2023. |
+| [`oxideav-basic`](https://crates.io/crates/oxideav-basic) | Closest **family** overlap: RIFF + RF64/BW64, WAVEFORMATEXTENSIBLE, G.711 dispatch. 0.0.x media stack, many crates. |
+| [`oxideav-g711`](https://crates.io/crates/oxideav-g711) / [`oxideav-adpcm`](https://crates.io/crates/oxideav-adpcm) | Standalone codecs for that stack. Not a WAVE ingest crate. |
+| [`decibri-decode`](https://crates.io/crates/decibri-decode) | WAV + AIFF + FLAC + headerless PCM/G.711. Broader than WAVE. |
+| [`rustwav`](https://crates.io/crates/rustwav) | Kitchen-sink (MP3/Opus/FLAC + resample). Custom license, many deps. |
+| [`shravan`](https://crates.io/crates/shravan) | WAV+FLAC+AIFF+… GPL-3. Different product. |
+| [`rff-format-wav`](https://crates.io/crates/rff-format-wav) | WAV demux in a “remade ffmpeg” stack. PCM via a sibling crate. |
+| [`audio-file`](https://crates.io/crates/audio-file) / [`symphonium`](https://crates.io/crates/symphonium) / [`audrey`](https://github.com/RustAudio/audrey) | Multi-format loaders on Symphonia / hound. |
+| [`creek`](https://crates.io/crates/creek) | Realtime disk streamer; decode is Symphonia. |
+| [`dasp-rs`](https://crates.io/crates/dasp-rs) | DSP/MIR; WAV I/O is a side door (and it resamples). |
+| [`oxiaudio-encode`](https://crates.io/crates/oxiaudio-encode) | WAV encode **via hound**. |
+| [`audio-codec-algorithms`](https://crates.io/crates/audio-codec-algorithms) / [`audio-codec`](https://crates.io/crates/audio-codec) / [`ezk-g711`](https://crates.io/crates/ezk-g711) | A-law/µ-law/ADPCM **bitstreams**, no RIFF. |
+
+Not codecs: [rodio](https://crates.io/crates/rodio) (playback via hound/symphonia),
+[cpal](https://crates.io/crates/cpal) (host I/O),
+[maudio](https://crates.io/crates/maudio) (miniaudio bindings — C).
+
+If a crate is a WAV **library** aimed at PCM RIFF or the WAVE family, it
+belongs in the speed table or in these lists with a reason. Gaps: open an
+issue.

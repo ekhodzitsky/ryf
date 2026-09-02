@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live under `docs/`.
 - Docs split: [docs/compare.md](docs/compare.md) lists WAVE crates;
   Criterion now times **wavers** 1.5 as well as hound and Symphonia.
+- Compare map covers C (dr_wav timed behind `bench-c`; libsndfile,
+  miniaudio, ffmpeg), other languages, and a fuller crates.io survey.
+  Vendored `native/dr_wav.h` is Criterion-only, not the product path.
 
 ### Performance
 

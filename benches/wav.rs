@@ -1,10 +1,12 @@
-//! In-process WAVE decode/encode vs hound, Symphonia, and wavers.
+//! In-process WAVE decode/encode vs hound, Symphonia, wavers, and (optional) dr_wav.
 //!
 //! Same classic RIFF bytes. Decode is measured through to mixed planar `f32`
 //! (the STT output). hound yields typed samples; the bench converts i16 with
 //! `/ 32768` and mixes stereo the same way ryf does (sum / n). Symphonia is
 //! probed as WAVE (`wav` + `pcm` features only) from a zero-copy slice.
 //! wavers reads `f32` from a `Cursor` (`Wav::new` + `read`).
+//! dr_wav (`--features bench-c`) is in-process C: memory decode to interleaved
+//! `f32`, then the same mix; sequential memory write for encode.
 //!
 //! ffmpeg is a **correctness oracle**, not a speed peer (process spawn).
 //! Symphonia does not encode. wavers encode is path-only — not in this bench.
@@ -22,6 +24,10 @@ use symphonia::core::probe::Hint;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use ryf::{DecodeOptions, WriteSpec, decode_bytes, encode, encode_f32, encode_s16};
+
+#[cfg(feature = "bench-c")]
+#[path = "drwav.rs"]
+mod drwav;
 
 const RATE: u32 = 16_000;
 const SECS: u32 = 2;
@@ -272,6 +278,10 @@ fn benches(c: &mut Criterion) {
     decode.bench_function("wavers/s16_mono_2s", |b| {
         b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(s16_mono)));
     });
+    #[cfg(feature = "bench-c")]
+    decode.bench_function("dr_wav/s16_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(drwav::decode_mixed_f32(s16_mono)));
+    });
     decode.throughput(Throughput::Bytes(s16_st.len() as u64));
     decode.bench_function("ryf/s16_stereo_mix_2s", |b| {
         b.iter(|| {
@@ -292,6 +302,10 @@ fn benches(c: &mut Criterion) {
     decode.bench_function("wavers/s16_stereo_mix_2s", |b| {
         b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(s16_st).len()));
     });
+    #[cfg(feature = "bench-c")]
+    decode.bench_function("dr_wav/s16_stereo_mix_2s", |b| {
+        b.iter(|| std::hint::black_box(drwav::decode_mixed_f32(s16_st).len()));
+    });
     decode.throughput(Throughput::Bytes(f32_mono.len() as u64));
     decode.bench_function("ryf/f32_mono_2s", |b| {
         b.iter(|| std::hint::black_box(ryf_decode_mono(f32_mono)));
@@ -304,6 +318,10 @@ fn benches(c: &mut Criterion) {
     });
     decode.bench_function("wavers/f32_mono_2s", |b| {
         b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(f32_mono)));
+    });
+    #[cfg(feature = "bench-c")]
+    decode.bench_function("dr_wav/f32_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(drwav::decode_mixed_f32(f32_mono)));
     });
     decode.finish();
 
@@ -318,11 +336,19 @@ fn benches(c: &mut Criterion) {
     encode_g.bench_function("hound/s16_mono_2s", |b| {
         b.iter(|| std::hint::black_box(hound_encode_s16(&tone)));
     });
+    #[cfg(feature = "bench-c")]
+    encode_g.bench_function("dr_wav/s16_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(drwav::encode_s16(&tone, RATE)));
+    });
     encode_g.bench_function("ryf/f32_mono_2s", |b| {
         b.iter(|| std::hint::black_box(encode_f32(&f32_tone, RATE, 1).expect("ryf encode")));
     });
     encode_g.bench_function("hound/f32_mono_2s", |b| {
         b.iter(|| std::hint::black_box(hound_encode_f32(&f32_tone)));
+    });
+    #[cfg(feature = "bench-c")]
+    encode_g.bench_function("dr_wav/f32_mono_2s", |b| {
+        b.iter(|| std::hint::black_box(drwav::encode_f32(&f32_tone, RATE)));
     });
     encode_g.finish();
 

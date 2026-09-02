@@ -14,7 +14,8 @@ native sample rate.
 - Default features (`adpcm` + `simd`) pull **no crates**.
 - No clap, tokio, anyhow, tracing, thiserror, hound, symphonia, wavers on
   the **product** path. `hound`, `symphonia`, `wavers`, and `criterion` are
-  **dev-only** bench competitors.
+  **dev-only** bench competitors. Optional `bench-c` vendors **dr_wav** (C)
+  via `cc` for Criterion only — never linked into the library.
 - Encode is PCM U8/S16/S24/S32 + IEEE f32, 1–26 ch: classic RIFF when it
   fits, RF64 when it does not (`encode_rf64` / `WavWriter::new_rf64` to
   force). Molv drop-in `encode_s16` (mono) / `encode_f32` / `write_s16`.
@@ -33,6 +34,7 @@ cargo clippy --all-targets -- -D warnings
 # impl-only line coverage (exclude sibling tests); target ≥ 90%
 cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only -- --skip proptest
 cargo bench --bench wav
+cargo bench --bench wav --features bench-c   # vs dr_wav; needs a C compiler
 ```
 
 Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read` /

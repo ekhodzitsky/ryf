@@ -13,6 +13,7 @@ documentation = "https://docs.rs/ryf"
 keywords = ["wav", "riff", "audio", "pcm", "codec"]
 categories = ["multimedia::audio"]
 publish = false
+autobenches = false
 
 [features]
 default = ["adpcm", "simd"]
@@ -20,9 +21,14 @@ default = ["adpcm", "simd"]
 adpcm = []
 # NEON (aarch64) + SSE4.1/SSE2 (x86) s16→f32 convert kernels.
 simd = []
+# Vendored dr_wav (C) for Criterion only. Needs a C compiler. Not product path.
+bench-c = ["dep:cc"]
 
 [dependencies]
 # Intentionally empty — pure std.
+
+[build-dependencies]
+cc = { version = "1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

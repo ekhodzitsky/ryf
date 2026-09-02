@@ -19,4 +19,5 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only -- --skip proptest
 cargo bench --bench wav
+cargo bench --bench wav --features bench-c   # vs dr_wav; needs a C compiler
 ```

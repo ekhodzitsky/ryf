@@ -659,6 +659,7 @@ dependencies = [
 name = "ryf"
 version = "0.2.1"
 dependencies = [
+ "cc",
  "criterion",
  "hound",
  "proptest",

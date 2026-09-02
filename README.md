@@ -13,16 +13,18 @@ No resample.
 
 [hound](https://github.com/ruuda/hound) is PCM/IEEE RIFF. [symphonia](https://github.com/pdeljanov/Symphonia)
 is a multi-format pipeline. [wavers](https://github.com/jmg049/wavers) is a later
-PCM/IEEE reader. **ryf is the WAVE family crate**: G.711, MS/IMA ADPCM, RF64,
-Wave64, extensible GUIDs, wild headers, hard RAM/duration caps.
+PCM/IEEE reader. [dr_wav](https://github.com/mackron/dr_libs) is the C header
+everyone actually ships. **ryf is the WAVE family crate**: G.711, MS/IMA ADPCM,
+RF64, Wave64, extensible GUIDs, wild headers, hard RAM/duration caps.
 
-| | ryf | hound | symphonia | wavers |
-|---|---|---|---|---|
-| Containers | RIFF, RIFX, RF64/BW64, W64 | RIFF | via codecs | RIFF |
-| G.711 / ADPCM | yes / yes | no / no | yes / limited | no / no |
-| Write | RIFF + RF64 PCM + f32 | PCM/IEEE | no | PCM/IEEE (path) |
-| Default deps | **none** | none | several | several |
-| Caps | yes | no | no | no |
+| | ryf | hound | symphonia | wavers | dr_wav |
+|---|---|---|---|---|---|
+| Lang | Rust | Rust | Rust | Rust | C |
+| Containers | RIFF, RIFX, RF64/BW64, W64 | RIFF | via codecs | RIFF | RIFF, RF64, W64 |
+| G.711 / ADPCM | yes / yes | no / no | yes / limited | no / no | yes / yes |
+| Write | RIFF + RF64 PCM + f32 | PCM/IEEE | no | PCM/IEEE (path) | PCM/IEEE |
+| Default deps | **none** | none | several | several | none (`.h`) |
+| Caps | yes | no | no | no | no |
 
 [compare](docs/compare.md) · [benchmarks](docs/benchmarks.md) ·
 [read](docs/read.md) · [write](docs/write.md) · [api](docs/api.md) ·
@@ -57,9 +59,10 @@ fn main() -> ryf::Result<()> {
 ## Speed
 
 Apple Silicon, 2 s @ 16 kHz **in-memory** RIFF → mixed planar f32.
-PCM16 mono: **3.78 µs** vs hound 193 µs (**51×**) / Symphonia 103 µs (**27×**) /
-wavers 18.2 µs (**4.8×**). Encode f32: **3.29 µs** vs hound 44 µs (**13×**).
-Cache-hot STT clip, not a file on disk. Linux x86 not measured.
+PCM16 mono: **3.78 µs** vs dr_wav 16.3 µs (**4.3×**) / wavers 18.5 (**4.9×**) /
+Symphonia 102 (**27×**) / hound 186 (**49×**). Encode f32: **3.30 µs** vs
+dr_wav 9.12 (**2.8×**) / hound 44 (**13×**). Encode s16 is a **tie** with
+dr_wav (~5.4–5.7 µs). Cache-hot STT clip, not a file on disk.
 Full table: [docs/benchmarks.md](docs/benchmarks.md).
 
 ffmpeg is a **test oracle**, not a runtime dep.
