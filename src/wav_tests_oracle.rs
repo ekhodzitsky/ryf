@@ -137,6 +137,11 @@ pub fn assert_bit_exact(label: &str, a: &[f32], b: &[f32]) {
         b.len()
     );
     for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+        // ffmpeg canonicalizes NaN payloads (and sometimes the sign bit);
+        // we pass IEEE bits through. Both are NaN — not an audio mismatch.
+        if x.is_nan() && y.is_nan() {
+            continue;
+        }
         let (xb, yb) = (x.to_bits(), y.to_bits());
         assert_eq!(
             xb, yb,
