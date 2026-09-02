@@ -2,6 +2,10 @@
 
 use crate::header::SampleCodec;
 
+/// `2^-15`. Bit-identical to `/ 32768.0` for every `i16`.
+pub(crate) const I16_SCALE: f32 = 1.0 / 32_768.0;
+const HALF: f32 = 0.5;
+
 pub(crate) mod g711;
 mod scalar;
 #[cfg(all(feature = "simd", not(miri)))]
@@ -279,14 +283,14 @@ unsafe fn convert_f32_mono_sse2(src: &[u8], dst: &mut [f32]) {
 #[inline]
 pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> f32 {
     match codec {
-        SampleCodec::U8 => (b[0] as f32) / 128.0 - 1.0,
+        SampleCodec::U8 => (b[0] as f32) * (1.0 / 128.0) - 1.0,
         SampleCodec::S16 => {
             let s = if big_endian {
                 i16::from_be_bytes([b[0], b[1]])
             } else {
                 i16::from_le_bytes([b[0], b[1]])
             };
-            s as f32 / 32_768.0
+            s as f32 * I16_SCALE
         }
         SampleCodec::S24 => {
             let (b0, b1, b2) = if big_endian {
@@ -295,7 +299,7 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
                 (b[0], b[1], b[2])
             };
             let sign = if b2 & 0x80 != 0 { 0xFF } else { 0x00 };
-            i32::from_le_bytes([b0, b1, b2, sign]) as f32 / 8_388_608.0
+            i32::from_le_bytes([b0, b1, b2, sign]) as f32 * (1.0 / 8_388_608.0)
         }
         SampleCodec::S24_4 => {
             let x = if big_endian {
@@ -341,7 +345,7 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
 
 /// Clip to [-1, 1] and pack little-endian i16 (`±1.0` → `±32767`).
 ///
-/// Distinct from the decode kernel (`/ 32768`): this is the molv product
+/// Distinct from the decode kernel (`* 2^-15`): this is the molv product
 /// pack used when writing PCM16 WAVE.
 #[must_use]
 pub fn f32_to_s16le(samples: &[f32]) -> Vec<u8> {

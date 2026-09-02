@@ -62,7 +62,7 @@ pub(crate) static ALAW_F32: [f32; 256] = {
     let mut t = [0.0f32; 256];
     let mut i = 0;
     while i < 256 {
-        t[i] = ALAW_I16[i] as f32 / 32_768.0;
+        t[i] = ALAW_I16[i] as f32 * super::I16_SCALE;
         i += 1;
     }
     t
@@ -72,7 +72,7 @@ pub(crate) static MULAW_F32: [f32; 256] = {
     let mut t = [0.0f32; 256];
     let mut i = 0;
     while i < 256 {
-        t[i] = MULAW_I16[i] as f32 / 32_768.0;
+        t[i] = MULAW_I16[i] as f32 * super::I16_SCALE;
         i += 1;
     }
     t

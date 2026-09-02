@@ -17,14 +17,14 @@ pub(super) fn convert_s16_mono_scalar(src: &[u8], dst: &mut [f32]) {
         for j in 0..8 {
             let b = base + j * 2;
             let s = i16::from_le_bytes([src[b], src[b + 1]]);
-            dst[i + j] = s as f32 / 32_768.0;
+            dst[i + j] = s as f32 * super::I16_SCALE;
         }
         i += 8;
     }
     while i < n {
         let b = i * 2;
         let s = i16::from_le_bytes([src[b], src[b + 1]]);
-        dst[i] = s as f32 / 32_768.0;
+        dst[i] = s as f32 * super::I16_SCALE;
         i += 1;
     }
 }
@@ -35,7 +35,7 @@ pub(super) fn mix_s16_nch_scalar(src: &[u8], dst: &mut [f32], channels: usize) {
     for (i, frame) in src.chunks_exact(frame_bytes).enumerate() {
         let mut sum = 0.0f32;
         for s in frame.as_chunks::<2>().0 {
-            sum += i16::from_le_bytes(*s) as f32 / 32_768.0;
+            sum += i16::from_le_bytes(*s) as f32 * super::I16_SCALE;
         }
         dst[i] = sum / n_ch;
     }
@@ -46,16 +46,16 @@ pub(super) fn split_s16_nch_scalar(src: &[u8], dst: &mut [&mut [f32]]) {
     let frame_bytes = channels * 2;
     for (fi, frame) in src.chunks_exact(frame_bytes).enumerate() {
         for (c, s) in frame.as_chunks::<2>().0.iter().enumerate() {
-            dst[c][fi] = i16::from_le_bytes(*s) as f32 / 32_768.0;
+            dst[c][fi] = i16::from_le_bytes(*s) as f32 * super::I16_SCALE;
         }
     }
 }
 
 pub(super) fn mix_s16_stereo_scalar(src: &[u8], dst: &mut [f32]) {
     for (i, frame) in src.as_chunks::<4>().0.iter().enumerate() {
-        let l = i16::from_le_bytes([frame[0], frame[1]]) as f32 / 32_768.0;
-        let r = i16::from_le_bytes([frame[2], frame[3]]) as f32 / 32_768.0;
-        dst[i] = (l + r) / 2.0;
+        let l = i16::from_le_bytes([frame[0], frame[1]]) as f32 * super::I16_SCALE;
+        let r = i16::from_le_bytes([frame[2], frame[3]]) as f32 * super::I16_SCALE;
+        dst[i] = (l + r) * super::HALF;
     }
 }
 
@@ -63,8 +63,8 @@ pub(super) fn split_s16_stereo_scalar(src: &[u8], left: &mut [f32], right: &mut 
     debug_assert_eq!(left.len(), right.len());
     debug_assert_eq!(src.len(), left.len() * 4);
     for (i, frame) in src.as_chunks::<4>().0.iter().enumerate() {
-        left[i] = i16::from_le_bytes([frame[0], frame[1]]) as f32 / 32_768.0;
-        right[i] = i16::from_le_bytes([frame[2], frame[3]]) as f32 / 32_768.0;
+        left[i] = i16::from_le_bytes([frame[0], frame[1]]) as f32 * super::I16_SCALE;
+        right[i] = i16::from_le_bytes([frame[2], frame[3]]) as f32 * super::I16_SCALE;
     }
 }
 

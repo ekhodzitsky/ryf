@@ -154,10 +154,28 @@ fn push_pcm_header(out: &mut Vec<u8>, spec: WriteSpec, data_len: u32) -> Result<
     let riff_len = PCM_RIFF_PREFIX
         .checked_add(data_len)
         .ok_or(WavError::RiffTooLarge)?;
-    out.extend_from_slice(b"RIFF");
-    out.extend_from_slice(&riff_len.to_le_bytes());
-    out.extend_from_slice(b"WAVE");
-    push_pcm_fmt_data(out, spec, data_len)
+    let width = spec.format.bytes_per_sample() as u16;
+    let block = spec.channels.saturating_mul(width);
+    let byte_rate = spec
+        .sample_rate
+        .checked_mul(u32::from(block))
+        .ok_or(WavError::RiffTooLarge)?;
+    let mut h = [0u8; 44];
+    h[0..4].copy_from_slice(b"RIFF");
+    h[4..8].copy_from_slice(&riff_len.to_le_bytes());
+    h[8..12].copy_from_slice(b"WAVE");
+    h[12..16].copy_from_slice(b"fmt ");
+    h[16..20].copy_from_slice(&16u32.to_le_bytes());
+    h[20..22].copy_from_slice(&1u16.to_le_bytes());
+    h[22..24].copy_from_slice(&spec.channels.to_le_bytes());
+    h[24..28].copy_from_slice(&spec.sample_rate.to_le_bytes());
+    h[28..32].copy_from_slice(&byte_rate.to_le_bytes());
+    h[32..34].copy_from_slice(&block.to_le_bytes());
+    h[34..36].copy_from_slice(&spec.format.bits().to_le_bytes());
+    h[36..40].copy_from_slice(b"data");
+    h[40..44].copy_from_slice(&data_len.to_le_bytes());
+    out.extend_from_slice(&h);
+    Ok(())
 }
 
 fn push_float_header(
@@ -175,8 +193,29 @@ fn push_float_header(
     let riff_len = FLOAT_RIFF_PREFIX
         .checked_add(data_len)
         .ok_or(WavError::RiffTooLarge)?;
-    out.extend_from_slice(b"RIFF");
-    out.extend_from_slice(&riff_len.to_le_bytes());
-    out.extend_from_slice(b"WAVE");
-    push_fmt_and_data(out, spec, data_len, frames)
+    let block = spec.channels.saturating_mul(4);
+    let byte_rate = spec
+        .sample_rate
+        .checked_mul(u32::from(block))
+        .ok_or(WavError::RiffTooLarge)?;
+    let mut h = [0u8; 58];
+    h[0..4].copy_from_slice(b"RIFF");
+    h[4..8].copy_from_slice(&riff_len.to_le_bytes());
+    h[8..12].copy_from_slice(b"WAVE");
+    h[12..16].copy_from_slice(b"fmt ");
+    h[16..20].copy_from_slice(&18u32.to_le_bytes());
+    h[20..22].copy_from_slice(&3u16.to_le_bytes());
+    h[22..24].copy_from_slice(&spec.channels.to_le_bytes());
+    h[24..28].copy_from_slice(&spec.sample_rate.to_le_bytes());
+    h[28..32].copy_from_slice(&byte_rate.to_le_bytes());
+    h[32..34].copy_from_slice(&block.to_le_bytes());
+    h[34..36].copy_from_slice(&32u16.to_le_bytes());
+    h[36..38].copy_from_slice(&0u16.to_le_bytes());
+    h[38..42].copy_from_slice(b"fact");
+    h[42..46].copy_from_slice(&4u32.to_le_bytes());
+    h[46..50].copy_from_slice(&frames.to_le_bytes());
+    h[50..54].copy_from_slice(b"data");
+    h[54..58].copy_from_slice(&data_len.to_le_bytes());
+    out.extend_from_slice(&h);
+    Ok(())
 }

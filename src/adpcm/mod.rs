@@ -252,14 +252,14 @@ pub(crate) fn i16_frames_to_f32(
             let mut mono = Vec::with_capacity(frames);
             if channels == 1 {
                 for &s in interleaved {
-                    mono.push(s as f32 / 32_768.0);
+                    mono.push(s as f32 * crate::convert::I16_SCALE);
                 }
             } else {
                 let n = channels as f32;
                 for frame in interleaved.chunks_exact(channels) {
                     let mut sum = 0.0f32;
                     for &s in frame {
-                        sum += s as f32 / 32_768.0;
+                        sum += s as f32 * crate::convert::I16_SCALE;
                     }
                     mono.push(sum / n);
                 }
@@ -270,7 +270,7 @@ pub(crate) fn i16_frames_to_f32(
             let mut out = vec![Vec::with_capacity(frames); channels];
             for frame in interleaved.chunks_exact(channels) {
                 for (c, &s) in frame.iter().enumerate() {
-                    out[c].push(s as f32 / 32_768.0);
+                    out[c].push(s as f32 * crate::convert::I16_SCALE);
                 }
             }
             out

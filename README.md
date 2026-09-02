@@ -55,7 +55,8 @@ fn main() -> ryf::Result<()> {
 ## Speed
 
 Apple Silicon, 2 s @ 16 kHz **in-memory** RIFF → mixed planar f32.
-PCM16 mono: **4.98 µs** vs hound 181 µs (**36×**) vs Symphonia 96 µs (**19×**).
+PCM16 mono: **3.74 µs** vs hound 193 µs (**51×**) vs Symphonia 102 µs (**27×**).
+Encode f32: **3.29 µs** vs hound 44 µs (**13×**).
 Cache-hot STT clip, not a file on disk. Linux x86 not measured.
 Full table: [docs/benchmarks.md](docs/benchmarks.md).
 

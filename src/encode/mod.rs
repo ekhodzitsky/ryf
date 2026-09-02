@@ -199,11 +199,33 @@ pub fn encode_f32(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Ve
     if !samples.len().is_multiple_of(ch) {
         return Err(WavError::OddPcm);
     }
-    let mut pcm = Vec::with_capacity(samples.len().saturating_mul(4));
-    for s in samples {
-        pcm.extend_from_slice(&s.to_le_bytes());
+    let nbytes = samples.len().checked_mul(4).ok_or(WavError::RiffTooLarge)?;
+    if needs_rf64(spec, nbytes as u64) {
+        let mut pcm = Vec::with_capacity(nbytes);
+        append_f32_le(&mut pcm, samples);
+        return encode_rf64(spec, &pcm);
     }
-    encode(spec, &pcm)
+    let data_len = u32_len(nbytes)?;
+    let mut out = Vec::with_capacity(58usize.saturating_add(nbytes));
+    push_header(&mut out, spec, data_len)?;
+    append_f32_le(&mut out, samples);
+    Ok(out)
+}
+
+fn append_f32_le(out: &mut Vec<u8>, samples: &[f32]) {
+    #[cfg(target_endian = "little")]
+    {
+        // SAFETY: `f32` is plain IEEE bits; length is `samples.len() * 4`.
+        let n = samples.len() * 4;
+        let bytes = unsafe { std::slice::from_raw_parts(samples.as_ptr().cast::<u8>(), n) };
+        out.extend_from_slice(bytes);
+    }
+    #[cfg(target_endian = "big")]
+    {
+        for s in samples {
+            out.extend_from_slice(&s.to_le_bytes());
+        }
+    }
 }
 
 #[cfg(test)]

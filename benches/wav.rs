@@ -55,6 +55,26 @@ fn s16_tone() -> Vec<i16> {
     (0..FRAMES).map(|i| (i as i16).wrapping_mul(13)).collect()
 }
 
+fn i16_as_le_bytes(samples: &[i16]) -> Vec<u8> {
+    let n = samples.len() * 2;
+    #[cfg(target_endian = "little")]
+    {
+        let mut out = Vec::with_capacity(n);
+        // SAFETY: `i16` is plain bits; length is `samples.len() * 2`.
+        let bytes = unsafe { std::slice::from_raw_parts(samples.as_ptr().cast::<u8>(), n) };
+        out.extend_from_slice(bytes);
+        out
+    }
+    #[cfg(target_endian = "big")]
+    {
+        let mut out = Vec::with_capacity(n);
+        for &s in samples {
+            out.extend_from_slice(&s.to_le_bytes());
+        }
+        out
+    }
+}
+
 fn hound_s16_to_mixed_f32(wav: &[u8]) -> Vec<f32> {
     let mut reader = hound::WavReader::new(Cursor::new(wav)).expect("hound open");
     let ch = usize::from(reader.spec().channels).max(1);
@@ -273,10 +293,7 @@ fn benches(c: &mut Criterion) {
     encode_g.throughput(Throughput::Elements(FRAMES as u64));
     encode_g.bench_function("ryf/s16_mono_2s", |b| {
         b.iter(|| {
-            let mut pcm = Vec::with_capacity(tone.len() * 2);
-            for &s in &tone {
-                pcm.extend_from_slice(&s.to_le_bytes());
-            }
+            let pcm = i16_as_le_bytes(&tone);
             std::hint::black_box(encode_s16(&pcm, RATE).expect("ryf encode"))
         });
     });

@@ -1,8 +1,9 @@
 //! Optional SIMD s16→f32 kernels (NEON / SSE4.1 / SSE2).
 
 use super::scalar::{mix_s16_stereo_scalar, split_s16_stereo_scalar};
+use super::{HALF, I16_SCALE};
 
-/// x86 SSE4.1: 8× s16 LE → f32 via `_mm_cvtepi16_epi32` + `_mm_div_ps`.
+/// x86 SSE4.1: 8× s16 LE → f32 via `_mm_cvtepi16_epi32` + `_mm_mul_ps`.
 ///
 /// # Safety
 /// Caller must ensure SSE4.1 is available (runtime-checked).
@@ -22,15 +23,15 @@ pub(super) unsafe fn convert_s16_mono_sse41(src: &[u8], dst: &mut [f32]) {
     let mut i = 0;
     // SAFETY: bounds checked by loop condition; unaligned loads/stores.
     unsafe {
-        let denom = _mm_set1_ps(32_768.0);
+        let scale = _mm_set1_ps(I16_SCALE);
         while i + 8 <= n {
             let p = src.as_ptr().add(i * 2) as *const __m128i;
             let v = _mm_loadu_si128(p); // 8 × i16
             // SSE4.1 sign-extend: low 4 and high 4 lanes.
             let lo = _mm_cvtepi16_epi32(v);
             let hi = _mm_cvtepi16_epi32(_mm_srli_si128(v, 8));
-            let flo = _mm_div_ps(_mm_cvtepi32_ps(lo), denom);
-            let fhi = _mm_div_ps(_mm_cvtepi32_ps(hi), denom);
+            let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
+            let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
             let out = dst.as_mut_ptr().add(i);
             _mm_storeu_ps(out, flo);
             _mm_storeu_ps(out.add(4), fhi);
@@ -40,7 +41,7 @@ pub(super) unsafe fn convert_s16_mono_sse41(src: &[u8], dst: &mut [f32]) {
     while i < n {
         let b = i * 2;
         let s = i16::from_le_bytes([src[b], src[b + 1]]);
-        dst[i] = s as f32 / 32_768.0;
+        dst[i] = s as f32 * I16_SCALE;
         i += 1;
     }
 }
@@ -66,7 +67,7 @@ pub(super) unsafe fn convert_s16_mono_sse2(src: &[u8], dst: &mut [f32]) {
     let mut i = 0;
     // SAFETY: bounds checked by loop condition; unaligned loads/stores.
     unsafe {
-        let denom = _mm_set1_ps(32_768.0);
+        let scale = _mm_set1_ps(I16_SCALE);
         while i + 8 <= n {
             let p = src.as_ptr().add(i * 2) as *const __m128i;
             let v = _mm_loadu_si128(p); // 8 × i16
@@ -74,8 +75,8 @@ pub(super) unsafe fn convert_s16_mono_sse2(src: &[u8], dst: &mut [f32]) {
             let sign = _mm_srai_epi16(v, 15);
             let lo = _mm_unpacklo_epi16(v, sign);
             let hi = _mm_unpackhi_epi16(v, sign);
-            let flo = _mm_div_ps(_mm_cvtepi32_ps(lo), denom);
-            let fhi = _mm_div_ps(_mm_cvtepi32_ps(hi), denom);
+            let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
+            let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
             let out = dst.as_mut_ptr().add(i);
             _mm_storeu_ps(out, flo);
             _mm_storeu_ps(out.add(4), fhi);
@@ -85,7 +86,7 @@ pub(super) unsafe fn convert_s16_mono_sse2(src: &[u8], dst: &mut [f32]) {
     while i < n {
         let b = i * 2;
         let s = i16::from_le_bytes([src[b], src[b + 1]]);
-        dst[i] = s as f32 / 32_768.0;
+        dst[i] = s as f32 * I16_SCALE;
         i += 1;
     }
 }
@@ -104,30 +105,54 @@ pub(super) unsafe fn convert_s16_mono_neon(src: &[u8], dst: &mut [f32]) {
     // SAFETY: all NEON ops below operate on local vectors or on slices
     // already bounds-checked by `i + 8 <= n` / `i < n`.
     unsafe {
-        let denom = vdupq_n_f32(32_768.0);
-        // 8 samples = 16 bytes per step.
+        let scale = vdupq_n_f32(I16_SCALE);
+        while i + 16 <= n {
+            let p = src.as_ptr().add(i * 2);
+            let v0 = vld1q_s16(p as *const i16);
+            let v1 = vld1q_s16(p.add(16) as *const i16);
+            let out = dst.as_mut_ptr().add(i);
+            vst1q_f32(
+                out,
+                vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(v0))), scale),
+            );
+            vst1q_f32(
+                out.add(4),
+                vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(v0))), scale),
+            );
+            vst1q_f32(
+                out.add(8),
+                vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(v1))), scale),
+            );
+            vst1q_f32(
+                out.add(12),
+                vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(v1))), scale),
+            );
+            i += 16;
+        }
         while i + 8 <= n {
             let p = src.as_ptr().add(i * 2);
             let v = vld1q_s16(p as *const i16);
-            let lo = vmovl_s16(vget_low_s16(v)); // i32x4
-            let hi = vmovl_s16(vget_high_s16(v));
-            let flo = vdivq_f32(vcvtq_f32_s32(lo), denom);
-            let fhi = vdivq_f32(vcvtq_f32_s32(hi), denom);
             let out = dst.as_mut_ptr().add(i);
-            vst1q_f32(out, flo);
-            vst1q_f32(out.add(4), fhi);
+            vst1q_f32(
+                out,
+                vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(v))), scale),
+            );
+            vst1q_f32(
+                out.add(4),
+                vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_high_s16(v))), scale),
+            );
             i += 8;
         }
     }
     while i < n {
         let b = i * 2;
         let s = i16::from_le_bytes([src[b], src[b + 1]]);
-        dst[i] = s as f32 / 32_768.0;
+        dst[i] = s as f32 * I16_SCALE;
         i += 1;
     }
 }
 
-/// aarch64: 4 stereo frames / step. Convert each channel, then `/ 2.0`.
+/// aarch64: 4 stereo frames / step. Convert each channel, then `* 0.5`.
 ///
 /// # Safety
 /// NEON is baseline on aarch64 product targets.
@@ -139,17 +164,17 @@ pub(super) unsafe fn mix_s16_stereo_neon(src: &[u8], dst: &mut [f32]) {
     let mut i = 0;
     // SAFETY: loop condition bounds the unaligned loads/stores.
     unsafe {
-        let denom = vdupq_n_f32(32_768.0);
-        let two = vdupq_n_f32(2.0);
+        let scale = vdupq_n_f32(I16_SCALE);
+        let half = vdupq_n_f32(HALF);
         while i + 4 <= n {
             let v = vld1q_s16(src.as_ptr().add(i * 4) as *const i16);
             let even = vuzp1q_s16(v, v);
             let odd = vuzp2q_s16(v, v);
             let l = vcvtq_f32_s32(vmovl_s16(vget_low_s16(even)));
             let r = vcvtq_f32_s32(vmovl_s16(vget_low_s16(odd)));
-            let lf = vdivq_f32(l, denom);
-            let rf = vdivq_f32(r, denom);
-            vst1q_f32(dst.as_mut_ptr().add(i), vdivq_f32(vaddq_f32(lf, rf), two));
+            let lf = vmulq_f32(l, scale);
+            let rf = vmulq_f32(r, scale);
+            vst1q_f32(dst.as_mut_ptr().add(i), vmulq_f32(vaddq_f32(lf, rf), half));
             i += 4;
         }
     }
@@ -168,13 +193,13 @@ pub(super) unsafe fn split_s16_stereo_neon(src: &[u8], left: &mut [f32], right: 
     let mut i = 0;
     // SAFETY: loop condition bounds the unaligned loads/stores.
     unsafe {
-        let denom = vdupq_n_f32(32_768.0);
+        let scale = vdupq_n_f32(I16_SCALE);
         while i + 4 <= n {
             let v = vld1q_s16(src.as_ptr().add(i * 4) as *const i16);
             let even = vuzp1q_s16(v, v);
             let odd = vuzp2q_s16(v, v);
-            let l = vdivq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(even))), denom);
-            let r = vdivq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(odd))), denom);
+            let l = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(even))), scale);
+            let r = vmulq_f32(vcvtq_f32_s32(vmovl_s16(vget_low_s16(odd))), scale);
             vst1q_f32(left.as_mut_ptr().add(i), l);
             vst1q_f32(right.as_mut_ptr().add(i), r);
             i += 4;
@@ -203,20 +228,20 @@ pub(super) unsafe fn mix_s16_stereo_sse41(src: &[u8], dst: &mut [f32]) {
     let mut i = 0;
     // SAFETY: loop condition bounds the unaligned loads/stores.
     unsafe {
-        let denom = _mm_set1_ps(32_768.0);
-        let two = _mm_set1_ps(2.0);
+        let scale = _mm_set1_ps(I16_SCALE);
+        let half = _mm_set1_ps(HALF);
         while i + 4 <= n {
             let v = _mm_loadu_si128(src.as_ptr().add(i * 4) as *const __m128i);
             let lo = _mm_cvtepi16_epi32(v);
             let hi = _mm_cvtepi16_epi32(_mm_srli_si128(v, 8));
-            let flo = _mm_div_ps(_mm_cvtepi32_ps(lo), denom);
-            let fhi = _mm_div_ps(_mm_cvtepi32_ps(hi), denom);
+            let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
+            let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
             // flo=[L0,R0,L1,R1] fhi=[L2,R2,L3,R3] → left/right then average.
             let left = _mm_shuffle_ps(flo, fhi, 0b10_00_10_00);
             let right = _mm_shuffle_ps(flo, fhi, 0b11_01_11_01);
             _mm_storeu_ps(
                 dst.as_mut_ptr().add(i),
-                _mm_div_ps(_mm_add_ps(left, right), two),
+                _mm_mul_ps(_mm_add_ps(left, right), half),
             );
             i += 4;
         }
@@ -244,13 +269,13 @@ pub(super) unsafe fn split_s16_stereo_sse41(src: &[u8], left: &mut [f32], right:
     let mut i = 0;
     // SAFETY: loop condition bounds the unaligned loads/stores.
     unsafe {
-        let denom = _mm_set1_ps(32_768.0);
+        let scale = _mm_set1_ps(I16_SCALE);
         while i + 4 <= n {
             let v = _mm_loadu_si128(src.as_ptr().add(i * 4) as *const __m128i);
             let lo = _mm_cvtepi16_epi32(v);
             let hi = _mm_cvtepi16_epi32(_mm_srli_si128(v, 8));
-            let flo = _mm_div_ps(_mm_cvtepi32_ps(lo), denom);
-            let fhi = _mm_div_ps(_mm_cvtepi32_ps(hi), denom);
+            let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
+            let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
             _mm_storeu_ps(
                 left.as_mut_ptr().add(i),
                 _mm_shuffle_ps(flo, fhi, 0b10_00_10_00),
@@ -285,20 +310,20 @@ pub(super) unsafe fn mix_s16_stereo_sse2(src: &[u8], dst: &mut [f32]) {
     let mut i = 0;
     // SAFETY: loop condition bounds the unaligned loads/stores.
     unsafe {
-        let denom = _mm_set1_ps(32_768.0);
-        let two = _mm_set1_ps(2.0);
+        let scale = _mm_set1_ps(I16_SCALE);
+        let half = _mm_set1_ps(HALF);
         while i + 4 <= n {
             let v = _mm_loadu_si128(src.as_ptr().add(i * 4) as *const __m128i);
             let sign = _mm_srai_epi16(v, 15);
             let lo = _mm_unpacklo_epi16(v, sign);
             let hi = _mm_unpackhi_epi16(v, sign);
-            let flo = _mm_div_ps(_mm_cvtepi32_ps(lo), denom);
-            let fhi = _mm_div_ps(_mm_cvtepi32_ps(hi), denom);
+            let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
+            let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
             let left = _mm_shuffle_ps(flo, fhi, 0b10_00_10_00);
             let right = _mm_shuffle_ps(flo, fhi, 0b11_01_11_01);
             _mm_storeu_ps(
                 dst.as_mut_ptr().add(i),
-                _mm_div_ps(_mm_add_ps(left, right), two),
+                _mm_mul_ps(_mm_add_ps(left, right), half),
             );
             i += 4;
         }
@@ -326,14 +351,14 @@ pub(super) unsafe fn split_s16_stereo_sse2(src: &[u8], left: &mut [f32], right: 
     let mut i = 0;
     // SAFETY: loop condition bounds the unaligned loads/stores.
     unsafe {
-        let denom = _mm_set1_ps(32_768.0);
+        let scale = _mm_set1_ps(I16_SCALE);
         while i + 4 <= n {
             let v = _mm_loadu_si128(src.as_ptr().add(i * 4) as *const __m128i);
             let sign = _mm_srai_epi16(v, 15);
             let lo = _mm_unpacklo_epi16(v, sign);
             let hi = _mm_unpackhi_epi16(v, sign);
-            let flo = _mm_div_ps(_mm_cvtepi32_ps(lo), denom);
-            let fhi = _mm_div_ps(_mm_cvtepi32_ps(hi), denom);
+            let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
+            let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
             _mm_storeu_ps(
                 left.as_mut_ptr().add(i),
                 _mm_shuffle_ps(flo, fhi, 0b10_00_10_00),

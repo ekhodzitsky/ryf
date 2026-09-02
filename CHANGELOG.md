@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README is the crate pitch (≤100 lines). Read/write/API/benches/correctness
   live under `docs/`.
 
+### Performance
+
+- s16→f32: multiply by `2^-15` instead of divide (bit-exact for every `i16`);
+  NEON convert is 16-wide.
+- `encode_f32`: one memcpy of IEEE bits on little-endian hosts.
+- Classic RIFF PCM/IEEE headers written as one stack buffer.
+
 ### Fixed
 
 - ffmpeg oracle: NaN payloads compare equal (Linux CI vs ffmpeg f32).

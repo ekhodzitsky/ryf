@@ -21,6 +21,15 @@ fn convert_s16_public_aliases_and_odd_lengths() {
 }
 
 #[test]
+fn i16_scale_mul_matches_div_every_code() {
+    for s in i16::MIN..=i16::MAX {
+        let div = s as f32 / 32_768.0;
+        let mul = s as f32 * I16_SCALE;
+        assert_eq!(div.to_bits(), mul.to_bits(), "s={s}");
+    }
+}
+
+#[test]
 fn convert_f32_mono_unroll_and_tail() {
     let vals = [0.0f32, 0.5, -0.25, 1.0, -1.0, 0.125]; // 6 = 4 unroll + 2 tail
     let mut src = Vec::new();

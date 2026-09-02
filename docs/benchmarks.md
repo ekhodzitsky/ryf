@@ -17,14 +17,15 @@ Apple Silicon (aarch64, NEON), rustc 1.88, `cargo bench --bench wav`
 
 | Workload | ryf | hound | symphonia | vs hound / vs sy |
 |---|---|---|---|---|
-| decode PCM16 mono → f32 | 4.98 µs | 181 µs | 96.1 µs | **36× / 19×** |
-| decode PCM16 stereo mix → f32 | 10.4 µs | 451 µs | 213 µs | **43× / 20×** |
-| decode IEEE f32 mono | 3.46 µs | 185 µs | 102 µs | **53× / 30×** |
-| encode PCM16 mono (from i16) | 18.5 µs | 113 µs | — | **6.1×** |
-| encode IEEE f32 mono | 23.1 µs | 56.4 µs | — | **2.4×** |
+| decode PCM16 mono → f32 | 3.74 µs | 193 µs | 102 µs | **51× / 27×** |
+| decode PCM16 stereo mix → f32 | 9.98 µs | 449 µs | 227 µs | **45× / 23×** |
+| decode IEEE f32 mono | 3.58 µs | 204 µs | 107 µs | **57× / 30×** |
+| encode PCM16 mono (from i16) | 5.22 µs | 112 µs | — | **21×** |
+| encode IEEE f32 mono | 3.29 µs | 44.1 µs | — | **13×** |
 
-`decode_streaming` on the same s16 mono clip is 5.10 µs (same kernels, no
-full-file planar alloc).
+`decode_streaming` on the same s16 mono clip is 5.40 µs (same kernels, no
+full-file planar alloc). Encode PCM16 packs i16 with a LE memcpy then
+`encode_s16`. Encode f32 copies IEEE bits once (no intermediate `Vec`).
 
 These numbers are **not** a 2-hour file on disk and **not** Linux x86
 (SSE path unmeasured here).
