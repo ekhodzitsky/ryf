@@ -66,7 +66,7 @@ fn headerless_rejects_and_mixes() -> crate::Result<()> {
     ));
     assert!(matches!(
         decode_g711(&[0], G711Law::ALaw, 8_000, 0, &DecodeOptions::speech()),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
 
     let stereo = decode_g711(

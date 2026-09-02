@@ -1,21 +1,22 @@
 //! Incremental WAVE writer (RIFF, or RF64 via [`WavWriter::new_rf64`]).
 //! Sizes are patched on [`WavWriter::finalize`] or on drop.
+//! Classic RIFF auto-promotes to RF64 when the payload would overflow `u32`.
 
 use std::fs::File;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use super::header::{
     RF64_DATA_SIZE_POS, RF64_FACT_FRAMES_POS, RF64_RIFF_SIZE_POS, RF64_SAMPLE_COUNT_POS,
-    data_len_pos, fact_frames_pos, frame_bytes, push_header, push_rf64_header, rf64_header_len,
-    riff_prefix, u32_len, validate_spec,
+    data_len_pos, fact_frames_pos, frame_bytes, needs_rf64, push_header, push_rf64_header,
+    rf64_header_len, riff_prefix, u32_len, validate_spec,
 };
 use super::{WriteFormat, WriteSpec};
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 
 /// Streaming WAVE writer. Header sizes are placeholders until [`Self::finalize`]
 /// (also attempted on drop, errors swallowed).
-pub struct WavWriter<W: Write + Seek> {
+pub struct WavWriter<W: Read + Write + Seek> {
     inner: W,
     spec: WriteSpec,
     data_bytes: u64,
@@ -35,8 +36,9 @@ impl WavWriter<File> {
     }
 }
 
-impl<W: Write + Seek> WavWriter<W> {
+impl<W: Read + Write + Seek> WavWriter<W> {
     /// Write a WAVE header with a zero-length `data` chunk onto `inner`.
+    /// Promotes to RF64 on write if sizes would overflow `u32`.
     pub fn new(mut inner: W, spec: WriteSpec) -> Result<Self> {
         validate_spec(spec)?;
         let mut header = Vec::with_capacity(58);
@@ -69,7 +71,7 @@ impl<W: Write + Seek> WavWriter<W> {
     /// Append interleaved PCM bytes (`format` width × channels per frame).
     pub fn write_pcm(&mut self, pcm: &[u8]) -> Result<()> {
         if self.finalized {
-            return Err(WavError::format("wav: writer already finalized"));
+            return Err(WavError::format(FormatKind::InvalidOperation));
         }
         let fb = frame_bytes(self.spec)?;
         if !pcm.len().is_multiple_of(fb) {
@@ -79,8 +81,8 @@ impl<W: Write + Seek> WavWriter<W> {
             .data_bytes
             .checked_add(pcm.len() as u64)
             .ok_or(WavError::RiffTooLarge)?;
-        if !self.rf64 && next > u64::from(u32::MAX) {
-            return Err(WavError::RiffTooLarge);
+        if !self.rf64 && needs_rf64(self.spec, next) {
+            self.promote_to_rf64()?;
         }
         self.inner.write_all(pcm)?;
         self.data_bytes = next;
@@ -90,7 +92,7 @@ impl<W: Write + Seek> WavWriter<W> {
     /// Append IEEE f32 samples. Spec must be [`WriteFormat::F32`].
     pub fn write_f32_samples(&mut self, samples: &[f32]) -> Result<()> {
         if self.spec.format != WriteFormat::F32 {
-            return Err(WavError::UnsupportedCodec);
+            return Err(WavError::unsupported_codec(3));
         }
         let mut buf = Vec::with_capacity(samples.len().saturating_mul(4));
         for s in samples {
@@ -114,6 +116,45 @@ impl<W: Write + Seek> WavWriter<W> {
         self.inner.flush()?;
         self.finalized = true;
         Ok(())
+    }
+
+    /// Rewrite a classic RIFF header as RF64 and slide the payload forward.
+    fn promote_to_rf64(&mut self) -> Result<()> {
+        if self.rf64 {
+            return Ok(());
+        }
+        let old_len = u64::from(riff_prefix(self.spec)).saturating_add(8);
+        let new_len = rf64_header_len(self.spec);
+        let delta = new_len.saturating_sub(old_len);
+        let payload = self.data_bytes;
+        const BLOCK: usize = 64 * 1024;
+        let mut buf = [0u8; BLOCK];
+        let mut remaining = payload;
+        while remaining > 0 {
+            let n = remaining.min(BLOCK as u64) as usize;
+            let src = old_len.saturating_add(remaining).saturating_sub(n as u64);
+            let dst = src.saturating_add(delta);
+            self.inner.seek(SeekFrom::Start(src))?;
+            self.inner.read_exact(&mut buf[..n])?;
+            self.inner.seek(SeekFrom::Start(dst))?;
+            self.inner.write_all(&buf[..n])?;
+            remaining -= n as u64;
+        }
+        let fb = frame_bytes(self.spec)? as u64;
+        let frames = payload.checked_div(fb).unwrap_or(0);
+        let mut header = Vec::with_capacity(new_len as usize);
+        push_rf64_header(&mut header, self.spec, payload, frames)?;
+        self.inner.seek(SeekFrom::Start(0))?;
+        self.inner.write_all(&header)?;
+        self.inner
+            .seek(SeekFrom::Start(new_len.saturating_add(payload)))?;
+        self.rf64 = true;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn force_rf64(&mut self) -> Result<()> {
+        self.promote_to_rf64()
     }
 
     fn patch(&mut self) -> Result<()> {
@@ -162,7 +203,7 @@ impl<W: Write + Seek> WavWriter<W> {
     }
 }
 
-impl<W: Write + Seek> Drop for WavWriter<W> {
+impl<W: Read + Write + Seek> Drop for WavWriter<W> {
     fn drop(&mut self) {
         if !self.finalized {
             let _ = self.patch();

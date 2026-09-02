@@ -6,7 +6,7 @@
 //! are enforced by the parent WAV decoder.
 
 use crate::ChannelMode;
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
 
 #[cfg(test)]
@@ -67,13 +67,11 @@ pub(crate) fn for_each_ms_adpcm_block(
 ) -> Result<usize> {
     let ch = params.channels;
     if ch == 0 || ch > 2 {
-        return Err(WavError::format(
-            "wav: MS-ADPCM supports 1 or 2 channels only",
-        ));
+        return Err(WavError::format(FormatKind::ChannelLayout));
     }
     let block = params.block_align as usize;
     if block < 7 * ch {
-        return Err(WavError::format("wav: MS-ADPCM block_align too small"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
     let coefs = if params.coefs.is_empty() {
         MS_DEFAULT_COEFS.as_slice()
@@ -86,8 +84,7 @@ pub(crate) fn for_each_ms_adpcm_block(
     let mut frames = 0usize;
 
     while remaining >= block as u64 {
-        mss.read_buf_exact(&mut block_buf)
-            .map_err(|e| WavError::format(format!("Error reading packet: {e}")))?;
+        mss.read_buf_exact(&mut block_buf).map_err(WavError::from)?;
         remaining -= block as u64;
 
         let decoded = if ch == 1 {
@@ -124,7 +121,7 @@ pub(crate) fn decode_ms_adpcm(
         .saturating_mul(ch);
     let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
     out.try_reserve(hint)
-        .map_err(|_| WavError::format("wav: MS-ADPCM allocation failed"))?;
+        .map_err(|_| WavError::format(FormatKind::Adpcm))?;
     for_each_ms_adpcm_block(mss, params, data_len, max_frames, 16_000, |block| {
         out.extend_from_slice(block);
         Ok(())
@@ -134,11 +131,11 @@ pub(crate) fn decode_ms_adpcm(
 
 fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> {
     if block.len() < 7 {
-        return Err(WavError::format("wav: MS-ADPCM short mono block"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
     let predictor = block[0] as usize;
     if predictor >= coefs.len() {
-        return Err(WavError::format("wav: MS-ADPCM predictor out of range"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
     let mut delta = i16::from_le_bytes([block[1], block[2]]);
     let sample1 = i16::from_le_bytes([block[3], block[4]]);
@@ -179,7 +176,7 @@ fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> 
 
 fn decode_ms_block_stereo(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> {
     if block.len() < 14 {
-        return Err(WavError::format("wav: MS-ADPCM short stereo block"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
     let predictor = [block[0], block[1]];
     let mut delta = [
@@ -196,7 +193,7 @@ fn decode_ms_block_stereo(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>
     ];
     for &p in &predictor {
         if p as usize >= coefs.len() {
-            return Err(WavError::format("wav: MS-ADPCM predictor out of range"));
+            return Err(WavError::format(FormatKind::Adpcm));
         }
     }
 

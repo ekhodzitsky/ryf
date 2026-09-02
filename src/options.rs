@@ -2,8 +2,9 @@
 
 use crate::ChannelMode;
 
-/// Defaults match the speech-ingest caps (2 h, 192 kHz, 4 GiB planar f32). Prefer
-/// [`DecodeOptions::unbounded`] or set explicit caps.
+/// Speech-ingest caps (2 h, 192 kHz, 4 GiB planar f32). Used by
+/// [`DecodeOptions::speech`] / [`crate::read_speech`]. Library default is
+/// [`DecodeOptions::unbounded`] (split channels).
 pub const DEFAULT_MAX_DURATION_SECS: f64 = 7200.0;
 pub const DEFAULT_MAX_SAMPLE_RATE: u32 = 192_000;
 /// Ceiling applied when converting duration → frame budget (limits RAM
@@ -32,6 +33,13 @@ pub struct DecodeOptions {
 
 impl Default for DecodeOptions {
     fn default() -> Self {
+        Self::unbounded()
+    }
+}
+
+impl DecodeOptions {
+    /// Mix-to-mono + speech-ingest caps (2 h, 192 kHz, 4 GiB planar).
+    pub fn speech() -> Self {
         Self {
             channel_mode: ChannelMode::Mono,
             max_duration_secs: DEFAULT_MAX_DURATION_SECS,
@@ -41,29 +49,15 @@ impl Default for DecodeOptions {
             source_label: None,
         }
     }
-}
 
-impl DecodeOptions {
-    /// Mono + speech-ingest caps (same as [`Default`]).
-    pub fn speech() -> Self {
-        Self::default()
-    }
-
-    /// Alias of [`Self::speech`] — historical `gigastt-wav` name.
-    #[deprecated(since = "0.2.0", note = "use DecodeOptions::speech")]
-    #[inline]
-    pub fn product_stt() -> Self {
-        Self::speech()
-    }
-
-    /// No practical duration / rate ceiling (library / archival use).
+    /// Split channels, no practical duration / rate ceiling (library default).
     ///
     /// Still uses a finite decode-rate ceiling of 192 kHz when sizing the
     /// frame budget so a corrupt header cannot request petabytes of RAM
     /// from a single multiplication.
     pub fn unbounded() -> Self {
         Self {
-            channel_mode: ChannelMode::Mono,
+            channel_mode: ChannelMode::Split,
             max_duration_secs: (usize::MAX / 4) as f64 / 192_000.0,
             max_sample_rate: 384_000,
             max_decode_sample_rate: 192_000,

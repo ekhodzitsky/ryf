@@ -1,4 +1,5 @@
 use super::*;
+use crate::FormatKind;
 use crate::error::Result;
 
 #[test]
@@ -34,7 +35,7 @@ fn test_diff_file_backed_decode_paths() -> Result<()> {
     let path = tmp
         .path()
         .to_str()
-        .ok_or_else(|| crate::WavError::format("utf8 temp path"))?
+        .ok_or_else(|| crate::WavError::format(FormatKind::InvalidOperation))?
         .to_owned();
 
     let via_file = decode_file_mono(&path)?;
@@ -459,9 +460,8 @@ fn test_seed_corpus_deterministic() {
 #[test]
 #[ignore = "writes files; run explicitly to regenerate the fuzz corpus"]
 fn test_wav_seed_corpus_write() -> Result<()> {
-    let dir = std::env::var("GIGASTT_WAV_SEED_DIR").map_err(|_| {
-        crate::WavError::format("set GIGASTT_WAV_SEED_DIR to the corpus output directory")
-    })?;
+    let dir = std::env::var("GIGASTT_WAV_SEED_DIR")
+        .map_err(|_| crate::WavError::format(FormatKind::InvalidOperation))?;
     std::fs::create_dir_all(&dir)?;
     for (name, data) in seed_corpus_entries() {
         std::fs::write(format!("{dir}/{name}.wav"), &data)?;

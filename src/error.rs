@@ -7,15 +7,61 @@ use std::io;
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, WavError>;
 
+/// Structural failure inside a WAVE container (the bytes started as WAVE).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormatKind {
+    /// Short read while walking a chunk.
+    Truncated,
+    /// `fmt ` body is truncated or internally inconsistent.
+    MalformedFmt,
+    /// ds64 / fact / LIST / RIFF size is broken.
+    MalformedChunk,
+    /// Required chunk missing (`fmt`, `data`, `ds64`).
+    MissingChunk,
+    /// Channel count or speaker mask is invalid.
+    ChannelLayout,
+    /// Bits / block align / frame size / payload length is invalid.
+    InvalidSize,
+    /// Known container, unknown PCM/IEEE layout.
+    UnsupportedWaveFormat,
+    /// ADPCM `fmt` extra or block header is invalid.
+    Adpcm,
+    /// API misuse (finalized writer, missing plane, bad callback).
+    InvalidOperation,
+}
+
+impl fmt::Display for FormatKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Truncated => "truncated WAVE chunk",
+            Self::MalformedFmt => "malformed fmt chunk",
+            Self::MalformedChunk => "malformed WAVE chunk",
+            Self::MissingChunk => "missing required WAVE chunk",
+            Self::ChannelLayout => "invalid channel layout",
+            Self::InvalidSize => "invalid WAVE size or frame layout",
+            Self::UnsupportedWaveFormat => "unsupported WAVE format layout",
+            Self::Adpcm => "malformed ADPCM block or fmt extra",
+            Self::InvalidOperation => "invalid WAVE operation",
+        })
+    }
+}
+
 /// Errors produced while sniffing, probing, decoding, or encoding WAVE.
 #[derive(Debug)]
 pub enum WavError {
     /// Underlying `Read` / `Seek` / `Write` failure.
     Io(io::Error),
-    /// Stream is not a supported WAVE container.
+    /// Stream is not a WAVE container (wrong magic / form).
     NotWave,
-    /// `fmt` codec / subtype is not implemented (or disabled by feature).
-    UnsupportedCodec,
+    /// `fmt` codec / subtype / channel layout is not implemented.
+    ///
+    /// `tag` is the WAVE `wFormatTag` (or extensible tag `0xFFFE`) when known;
+    /// `0` means the API rejected a layout that is not a format tag (e.g. not
+    /// PCM16 mono on [`crate::decode_s16`], G.711 channel count, write spec).
+    UnsupportedCodec {
+        /// WAVE format tag, or `0` if this was not a tagged codec.
+        tag: u16,
+    },
     /// Sample rate is zero or above the configured ceiling.
     UnsupportedSampleRate { rate: u32, max: u32 },
     /// Decoded (or declared) duration exceeds the configured budget.
@@ -32,14 +78,25 @@ pub enum WavError {
     Empty,
     /// Encoded RIFF size does not fit in `u32`.
     RiffTooLarge,
-    /// Structural / header / chunk layout failure.
-    Format(String),
+    /// WAVE container with a broken chunk walk.
+    Format(FormatKind),
 }
 
 impl WavError {
     #[inline]
-    pub fn format(msg: impl Into<String>) -> Self {
-        Self::Format(msg.into())
+    pub fn format(kind: FormatKind) -> Self {
+        Self::Format(kind)
+    }
+
+    #[inline]
+    pub fn unsupported_codec(tag: u16) -> Self {
+        Self::UnsupportedCodec { tag }
+    }
+
+    /// Packet / short-read helper used by pull loops.
+    #[inline]
+    pub(crate) fn packet_io(err: io::Error) -> Self {
+        Self::Io(err)
     }
 
     #[inline]
@@ -60,12 +117,6 @@ impl WavError {
         Self::OutputTooLarge { bytes, max }
     }
 
-    /// Packet / short-read helper used by pull loops.
-    #[inline]
-    pub(crate) fn packet_io(err: io::Error) -> Self {
-        Self::format(format!("Error reading packet: {err}"))
-    }
-
     /// Whether this error should surface as a generic unsupported-format class
     /// in higher layers (vs codec / duration / IO).
     pub fn is_format_class(&self) -> bool {
@@ -84,8 +135,13 @@ impl fmt::Display for WavError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "{e}"),
-            Self::NotWave => write!(f, "Unsupported audio format"),
-            Self::UnsupportedCodec => write!(f, "Unsupported audio codec"),
+            Self::NotWave => write!(f, "not a WAVE container"),
+            Self::UnsupportedCodec { tag } if *tag == 0 => {
+                write!(f, "unsupported audio codec")
+            }
+            Self::UnsupportedCodec { tag } => {
+                write!(f, "unsupported audio codec (format tag 0x{tag:04x})")
+            }
             Self::UnsupportedSampleRate { rate, max } => {
                 write!(f, "Unsupported sample rate: {rate}Hz (max {max}Hz)")
             }
@@ -109,7 +165,7 @@ impl fmt::Display for WavError {
             Self::OddPcm => write!(f, "PCM length is not a whole number of frames"),
             Self::Empty => write!(f, "WAVE data chunk is empty"),
             Self::RiffTooLarge => write!(f, "WAVE payload does not fit in a RIFF u32"),
-            Self::Format(msg) => write!(f, "{msg}"),
+            Self::Format(kind) => write!(f, "{kind}"),
         }
     }
 }
@@ -126,6 +182,12 @@ impl std::error::Error for WavError {
 impl From<io::Error> for WavError {
     fn from(value: io::Error) -> Self {
         Self::Io(value)
+    }
+}
+
+impl From<FormatKind> for WavError {
+    fn from(kind: FormatKind) -> Self {
+        Self::Format(kind)
     }
 }
 

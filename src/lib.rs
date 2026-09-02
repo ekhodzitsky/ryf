@@ -1,4 +1,22 @@
-#![doc = include_str!("../README.md")]
+//! Untrusted / telephony WAVE → planar `f32`.
+//!
+//! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
+//! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /
+//! [`DecodeOptions::speech`].
+//!
+//! [`DecodedWav`], [`WavError`], [`WriteSpec`]. GitHub README is the crate
+//! pitch; this page is the API.
+//!
+//! ```
+//! # fn main() -> ryf::Result<()> {
+//! let pcm = ryf::f32_to_s16le(&[0.25, -0.5, 0.0]);
+//! let wav = ryf::encode_s16(&pcm, 16_000)?;
+//! let decoded = ryf::decode_bytes(&wav, ryf::DecodeOptions::default())?;
+//! assert_eq!(decoded.frames(), 3);
+//! # Ok(())
+//! # }
+//! ```
+
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "adpcm")]
@@ -19,27 +37,17 @@ pub use encode::{
     WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_rf64, encode_s16, write,
     write_f32, write_rf64, write_s16,
 };
-pub use error::{Result, WavError};
+pub use error::{FormatKind, Result, WavError};
 pub use g711::{G711Law, decode_g711, decode_g711_alaw, decode_g711_mulaw};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,
     DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,
 };
-/// Historical `gigastt-wav` aliases of the `DEFAULT_*` caps.
-#[deprecated(since = "0.2.0", note = "use DEFAULT_MAX_DURATION_SECS")]
-pub const MAX_DURATION_S: f64 = DEFAULT_MAX_DURATION_SECS;
-#[deprecated(since = "0.2.0", note = "use DEFAULT_MAX_SAMPLE_RATE")]
-pub const MAX_SAMPLE_RATE: u32 = DEFAULT_MAX_SAMPLE_RATE;
-#[deprecated(since = "0.2.0", note = "use DEFAULT_MAX_DECODE_SAMPLE_RATE")]
-pub const MAX_DECODE_SAMPLE_RATE: u32 = DEFAULT_MAX_DECODE_SAMPLE_RATE;
 pub use source::ByteSource;
-#[deprecated(since = "0.2.0", note = "use convert_s16_le_to_f32")]
-#[allow(deprecated)]
-pub use wav::convert_s16_mono_pub;
 pub use wav::{
     DecodedWav, ProbeCodec, StreamBlock, StreamInfo, WavProbe, convert_s16_le_to_f32, decode,
-    decode_bytes, decode_f32, decode_s16, decode_streaming, decode_with, probe, probe_with, read,
-    read_f32, read_s16, read_with, sniff_is_riff_wave, sniff_wav,
+    decode_bytes, decode_f32, decode_reader, decode_s16, decode_streaming, decode_with, probe,
+    probe_with, read, read_f32, read_s16, read_speech, read_with, sniff_is_riff_wave, sniff_wav,
 };
 
 /// How decoded channels are laid out in [`DecodedWav::channels`] /
@@ -49,17 +57,17 @@ pub use wav::{
 /// the ffmpeg oracle tests use).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChannelMode {
-    /// One mixed track (`channels.len() == 1`). Default.
-    #[default]
+    /// One mixed track (`channels.len() == 1`).
     Mono,
-    /// One track per source channel, equal lengths.
+    /// One track per source channel, equal lengths. Default for library read.
+    #[default]
     Split,
 }
 
 /// Maximum decoded frames for `sample_rate` under [`DecodeOptions::speech`].
 #[inline]
 pub fn max_decode_samples(sample_rate: u32) -> usize {
-    DecodeOptions::default().max_frames(sample_rate)
+    DecodeOptions::speech().max_frames(sample_rate)
 }
 
 #[cfg(test)]

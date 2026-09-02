@@ -1,5 +1,5 @@
 use super::*;
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
 
 #[test]
@@ -36,7 +36,7 @@ fn ambisonic_and_channel_mask_helpers() -> Result<()> {
     assert_eq!(fix_wave_channel_mask(0b01, 2), Some(0b11));
     // Shrink mask when popcount > channels.
     let shrunk = fix_wave_channel_mask(0b1111, 2)
-        .ok_or_else(|| crate::WavError::format("expected a fixed channel mask"))?;
+        .ok_or_else(|| crate::WavError::format(FormatKind::ChannelLayout))?;
     assert_eq!(shrunk.count_ones(), 2);
     // Too many channels.
     assert!(fix_wave_channel_mask(0, 33).is_none());
@@ -351,7 +351,7 @@ fn fmt_extensible_error_matrix() -> Result<()> {
     let wav = riff(&ext_fmt(alaw, 8, 4, 0, 1, 22), &[0xd5]);
     assert!(matches!(
         crate::probe(&mut ByteSource::from_slice(&wav)),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
     Ok(())
 }

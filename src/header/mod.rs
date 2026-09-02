@@ -1,6 +1,6 @@
 //! WAVE header demux: containers, `fmt ` / `data` walk, Wave64.
 
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 
 #[cfg(feature = "adpcm")]
 use crate::adpcm::{ImaAdpcmParams, MsAdpcmParams};
@@ -135,6 +135,8 @@ pub(crate) struct FmtFields {
     pub(crate) adpcm_ima: Option<ImaAdpcmParams>,
     /// Sample multi-byte fields are big-endian (RIFX).
     pub(crate) big_endian: bool,
+    /// WAVE `wFormatTag` (extensible is `0xFFFE`).
+    pub(crate) format_tag: u16,
 }
 
 /// Parsed stream header up to the start of the `data` chunk.
@@ -194,11 +196,11 @@ pub(crate) const KSDATAFORMAT_SUBTYPE_AMBISONIC_IEEE_FLOAT: [u8; 16] = [
 /// Resolve container width from `block_align` when consistent; else bits/8.
 fn container_width(block_align: u16, num_channels: u16, bits_per_sample: u16) -> Result<usize> {
     if num_channels == 0 {
-        return Err(WavError::format("riff: invalid channel count"));
+        return Err(WavError::format(FormatKind::ChannelLayout));
     }
     let min_w = (bits_per_sample as usize).div_ceil(8);
     if min_w == 0 || min_w > 8 {
-        return Err(WavError::format("wav: unsupported bits per sample"));
+        return Err(WavError::format(FormatKind::InvalidSize));
     }
     if block_align > 0 && block_align.is_multiple_of(num_channels) {
         let w = (block_align / num_channels) as usize;
@@ -218,9 +220,7 @@ fn pcm_codec_for(bits_per_sample: u16, width: usize) -> Result<(SampleCodec, usi
         (24, 3) => Ok((SampleCodec::S24, 3)),
         (24, w) if w >= 4 => Ok((SampleCodec::S24_4, w)),
         (32, w) if w >= 4 => Ok((SampleCodec::S32, w)),
-        _ => Err(WavError::format(format!(
-            "wav: unsupported PCM layout bits={bits_per_sample} width={width}"
-        ))),
+        _ => Err(WavError::format(FormatKind::UnsupportedWaveFormat)),
     }
 }
 
@@ -229,7 +229,7 @@ fn map_wave_channel_count(count: u16) -> Result<usize> {
     if (1..=26).contains(&count) {
         Ok(usize::from(count))
     } else {
-        Err(WavError::format("riff: invalid channel count"))
+        Err(WavError::format(FormatKind::ChannelLayout))
     }
 }
 
@@ -237,7 +237,7 @@ fn map_wave_channel_count(count: u16) -> Result<usize> {
 fn map_ambisonic_channel_count(count: u16) -> Result<usize> {
     match count {
         1..=9 | 11 | 16 => Ok(usize::from(count)),
-        _ => Err(WavError::format("wav: invalid ambisonic channel count")),
+        _ => Err(WavError::format(FormatKind::ChannelLayout)),
     }
 }
 

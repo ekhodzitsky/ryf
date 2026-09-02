@@ -20,9 +20,10 @@ Also:
 Headerless G.711 (rate and channel count stated by the caller):
 `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`.
 
-From a path: `read` / `read_with` (planar `f32`), `read_s16` / `read_f32`
-(molv drop-ins). From a `File` or any `Read + Seek`:
-`ByteSource::from_file` / `from_read_seek` + `decode_with`.
-From a buffer: `decode_bytes`. Streaming: `decode_streaming`.
+From a path: `read` (split, archival caps) / `read_speech` (mix, 2 h) /
+`read_with`. Molv drop-ins: `read_s16` / `read_f32`. From a `File` or any
+`Read + Seek + Send`: `ByteSource::from_file` / `from_read_seek` +
+`decode_with`. From a buffer: `decode_bytes`. From `impl Read` (slurp):
+`decode_reader`. Streaming: `decode_streaming`.
 
 Empty decode is `WavError::Empty`.

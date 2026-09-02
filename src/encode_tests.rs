@@ -31,11 +31,11 @@ fn encode_s16_rejects_odd_empty_zero_rate() -> Result<()> {
 fn encode_f32_rejects_bad_channels_empty_odd_zero_rate() {
     assert!(matches!(
         encode_f32(&[0.1], 16_000, 0),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
     assert!(matches!(
         encode_f32(&[0.1], 16_000, 27),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
     assert!(matches!(
         encode_f32(&[0.1], 16_000, 3),
@@ -117,7 +117,7 @@ fn f32_to_s16le_clips_and_s16le_to_f32_peak() -> Result<()> {
     let pcm = crate::f32_to_s16le(&[0.0, 1.0, -1.0, 2.0]);
     assert_eq!(i16::from_le_bytes([pcm[0], pcm[1]]), 0);
     assert_eq!(i16::from_le_bytes([pcm[2], pcm[3]]), 32_767);
-    assert_eq!(i16::from_le_bytes([pcm[4], pcm[5]]), -32_767);
+    assert_eq!(i16::from_le_bytes([pcm[4], pcm[5]]), i16::MIN);
     assert_eq!(i16::from_le_bytes([pcm[6], pcm[7]]), 32_767);
 
     let f = crate::s16le_to_f32(&crate::f32_to_s16le(&[1.0]))?;
@@ -125,7 +125,7 @@ fn f32_to_s16le_clips_and_s16le_to_f32_peak() -> Result<()> {
     assert!(matches!(crate::s16le_to_f32(&[0]), Err(WavError::OddPcm)));
 
     let min = crate::s16le_to_f32(&i16::MIN.to_le_bytes())?;
-    assert!((-1.001..-1.0).contains(&min[0]));
+    assert_eq!(min[0], -1.0);
     Ok(())
 }
 
@@ -169,7 +169,7 @@ fn decode_s16_roundtrip_and_rejects() -> Result<()> {
     let f = encode_f32(&[0.1], 16_000, 1)?;
     assert!(matches!(
         crate::decode_s16(&f),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
 
     let mut odd = wav;
@@ -281,11 +281,11 @@ fn encode_rejects_bad_spec_and_odd_frames() {
     ));
     assert!(matches!(
         encode(WriteSpec::s16(16_000, 0), &[]),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
     assert!(matches!(
         encode(WriteSpec::s16(16_000, 27), &[]),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
     assert!(matches!(
         encode(WriteSpec::s16(16_000, 2), &[0, 1]),
@@ -325,7 +325,7 @@ fn wav_writer_chunks_finalize_and_drop() -> Result<()> {
     assert!(matches!(w.write_pcm(&[0]), Err(WavError::OddPcm)));
     assert!(matches!(
         w.write_f32_samples(&[0.1]),
-        Err(WavError::UnsupportedCodec)
+        Err(WavError::UnsupportedCodec { .. })
     ));
 
     let samples = [0.25f32, -0.5];
@@ -391,6 +391,26 @@ fn encode_rf64_roundtrips_pcm_and_float() -> Result<()> {
 
     let small = encode_s16(&pcm, 16_000)?;
     assert_eq!(&small[..4], b"RIFF");
+    Ok(())
+}
+
+#[test]
+fn wav_writer_promotes_riff_to_rf64() -> Result<()> {
+    use std::io::Cursor;
+
+    let pcm = f32_to_s16le(&[0.1, -0.2, 0.0]);
+    let spec = WriteSpec::s16(16_000, 1);
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new(&mut cur, spec)?;
+        w.write_pcm(&pcm)?;
+        w.force_rf64()?;
+        w.finalize()?;
+    }
+    let wav = cur.into_inner();
+    assert_eq!(&wav[..4], b"RF64");
+    let decoded = crate::decode_bytes(&wav, crate::DecodeOptions::default())?;
+    assert_eq!(decoded.frames(), 3);
     Ok(())
 }
 

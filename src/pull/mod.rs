@@ -1,7 +1,7 @@
 //! Pull-parser PCM decode (O(block) peak RAM for PCM paths).
 
 use crate::ChannelMode;
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 use crate::header::{FmtFields, SampleCodec, parse_header};
 use crate::options::DecodeOptions;
 use crate::source::ByteSource;
@@ -124,7 +124,7 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
         return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
     }
     if matches!(header.fmt.codec, SampleCodec::Unsupported) {
-        return Err(WavError::UnsupportedCodec);
+        return Err(WavError::unsupported_codec(header.fmt.format_tag));
     }
 
     let channels = header.fmt.channels;
@@ -151,7 +151,7 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
         let frame_bytes = sample_width
             .checked_mul(channels)
             .filter(|&n| n > 0)
-            .ok_or_else(|| WavError::format("wav: invalid frame size"))?;
+            .ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
         let actual_frames = data_len / frame_bytes as u64;
         // Duration follows *available* PCM. A lying `fact` / ds64 count that
         // is smaller still wins (W64 8-byte pad, RF64 leftovers). A lying

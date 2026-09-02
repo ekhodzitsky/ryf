@@ -9,7 +9,7 @@ use super::{
     WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width, fix_wave_channel_mask,
     map_ambisonic_channel_count, map_wave_channel_count, pcm_codec_for,
 };
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
 
 #[cfg(feature = "adpcm")]
@@ -24,7 +24,7 @@ pub(super) fn parse_fmt_chunk(
     big_endian: bool,
 ) -> Result<FmtFields> {
     if chunk_len < 16 {
-        return Err(WavError::format("wav: malformed fmt chunk"));
+        return Err(WavError::format(FormatKind::MalformedFmt));
     }
 
     let format = read_u16_endian(mss, big_endian)?;
@@ -45,7 +45,7 @@ pub(super) fn parse_fmt_chunk(
                 40 => {
                     mss.ignore_bytes(24)?;
                 }
-                _ => return Err(WavError::format("wav: malformed fmt_pcm chunk")),
+                _ => return Err(WavError::format(FormatKind::MalformedFmt)),
             }
 
             let width = container_width(block_align, num_channels, bits_per_sample)?;
@@ -59,6 +59,7 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ms: None,
                 adpcm_ima: None,
                 big_endian: false,
+                format_tag: format,
             })
         }
         WAVE_FORMAT_IEEE_FLOAT => {
@@ -67,9 +68,7 @@ pub(super) fn parse_fmt_chunk(
                 18 => {
                     let extra_size = read_u16_endian(mss, big_endian)?;
                     if extra_size != 0 {
-                        return Err(WavError::format(
-                            "wav: extra data not expected for fmt_ieee chunk",
-                        ));
+                        return Err(WavError::format(FormatKind::MalformedFmt));
                     }
                 }
                 40 => {
@@ -78,7 +77,7 @@ pub(super) fn parse_fmt_chunk(
                 n if n > 18 => {
                     mss.ignore_bytes(u64::from(n - 16))?;
                 }
-                _ => return Err(WavError::format("wav: malformed fmt_ieee chunk")),
+                _ => return Err(WavError::format(FormatKind::MalformedFmt)),
             }
 
             let width = container_width(block_align, num_channels, bits_per_sample)?;
@@ -88,9 +87,7 @@ pub(super) fn parse_fmt_chunk(
                 (32, w) if w >= 4 => (SampleCodec::F32, w),
                 (64, w) if w >= 8 => (SampleCodec::F64, w),
                 _ => {
-                    return Err(WavError::format(
-                        "wav: bits per sample for fmt_ieee must be 32 or 64 bits",
-                    ));
+                    return Err(WavError::format(FormatKind::InvalidSize));
                 }
             };
 
@@ -103,12 +100,13 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ms: None,
                 adpcm_ima: None,
                 big_endian: false,
+                format_tag: format,
             })
         }
         WAVE_FORMAT_ALAW | WAVE_FORMAT_MULAW => {
             // Canonical is 18; accept 16 and longer wild sizes.
             if chunk_len < 16 {
-                return Err(WavError::format("wav: malformed fmt_alaw chunk"));
+                return Err(WavError::format(FormatKind::MalformedFmt));
             }
             if chunk_len >= 18 {
                 let extra_size = read_u16_endian(mss, big_endian)?;
@@ -138,40 +136,37 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ms: None,
                 adpcm_ima: None,
                 big_endian: false,
+                format_tag: format,
             })
         }
         WAVE_FORMAT_ADPCM_MS | WAVE_FORMAT_ADPCM_IMA => {
             if bits_per_sample != 4 {
-                return Err(WavError::format(
-                    "wav: bits per sample for fmt_adpcm must be 4 bits",
-                ));
+                return Err(WavError::format(FormatKind::InvalidSize));
             }
             if chunk_len < 20 {
-                return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
+                return Err(WavError::format(FormatKind::MalformedFmt));
             }
             let channels = map_wave_channel_count(num_channels)?;
             if channels > 2 {
-                return Err(WavError::format("wav: ADPCM supports at most 2 channels"));
+                return Err(WavError::format(FormatKind::ChannelLayout));
             }
             if block_align == 0 {
-                return Err(WavError::format("wav: ADPCM block_align is zero"));
+                return Err(WavError::format(FormatKind::Adpcm));
             }
             let extra_size = u64::from(read_u16_endian(mss, big_endian)?);
             if format == WAVE_FORMAT_ADPCM_MS {
                 // samplesPerBlock (2) + numCoefs (2) + coefs (4 * n)
                 if extra_size < 32 {
-                    return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
+                    return Err(WavError::format(FormatKind::MalformedFmt));
                 }
                 let samples_per_block = read_u16_endian(mss, big_endian)?;
                 let num_coefs = read_u16_endian(mss, big_endian)?;
                 if num_coefs == 0 || num_coefs > 256 {
-                    return Err(WavError::format("wav: MS-ADPCM invalid coefficient count"));
+                    return Err(WavError::format(FormatKind::Adpcm));
                 }
                 let coef_bytes = u64::from(num_coefs) * 4;
                 if extra_size < 4 + coef_bytes {
-                    return Err(WavError::format(
-                        "wav: MS-ADPCM coefficient table truncated",
-                    ));
+                    return Err(WavError::format(FormatKind::Adpcm));
                 }
                 let mut coefs = Vec::with_capacity(num_coefs as usize);
                 for _ in 0..num_coefs {
@@ -196,11 +191,12 @@ pub(super) fn parse_fmt_chunk(
                     }),
                     adpcm_ima: None,
                     big_endian: false,
+                    format_tag: format,
                 })
             } else {
                 // WAVE_FORMAT_ADPCM_IMA — outer match is MS | IMA.
                 if extra_size != 2 {
-                    return Err(WavError::format("wav: malformed fmt_adpcm chunk"));
+                    return Err(WavError::format(FormatKind::MalformedFmt));
                 }
                 let samples_per_block = read_u16_endian(mss, big_endian)?;
                 Ok(FmtFields {
@@ -215,19 +211,18 @@ pub(super) fn parse_fmt_chunk(
                         channels,
                     }),
                     big_endian: false,
+                    format_tag: format,
                 })
             }
         }
         WAVE_FORMAT_EXTENSIBLE => {
             if chunk_len < 40 {
-                return Err(WavError::format("wav: malformed fmt_ext chunk"));
+                return Err(WavError::format(FormatKind::MalformedFmt));
             }
 
             let extra_size = read_u16_endian(mss, big_endian)?;
             if extra_size != 22 {
-                return Err(WavError::format(
-                    "wav: extra data size not 22 bytes for fmt_ext chunk",
-                ));
+                return Err(WavError::format(FormatKind::MalformedFmt));
             }
 
             let mut valid_bits_per_sample = read_u16_endian(mss, big_endian)?;
@@ -237,9 +232,7 @@ pub(super) fn parse_fmt_chunk(
             }
 
             if bits_per_sample & 0x7 != 0 {
-                return Err(WavError::format(
-                    "wav: bits per coded sample for fmt_ext must be a multiple of 8",
-                ));
+                return Err(WavError::format(FormatKind::InvalidSize));
             }
 
             let channel_mask = read_u32_endian(mss, big_endian)?;
@@ -262,9 +255,7 @@ pub(super) fn parse_fmt_chunk(
             let (codec, width) = match sub_format_guid {
                 KSDATAFORMAT_SUBTYPE_PCM | KSDATAFORMAT_SUBTYPE_AMBISONIC_PCM => {
                     if valid_bits_per_sample > container_bits {
-                        return Err(WavError::format(
-                            "wav: valid bits per sample for fmt_ext PCM sub-type must be <= bits per sample",
-                        ));
+                        return Err(WavError::format(FormatKind::MalformedFmt));
                     }
                     // Layout is driven by the container (`wBitsPerSample` +
                     // `block_align`). Partial `wValidBitsPerSample` is accepted
@@ -276,33 +267,25 @@ pub(super) fn parse_fmt_chunk(
                     if !(matches!(container_bits, 8 | 16 | 24 | 32)
                         && width >= (container_bits as usize).div_ceil(8))
                     {
-                        return Err(WavError::format(
-                            "wav: bits per sample for fmt_ext PCM sub-type must be 8, 16, 24, or 32 bits",
-                        ));
+                        return Err(WavError::format(FormatKind::InvalidSize));
                     }
                     pcm_codec_for(container_bits, width)?
                 }
                 KSDATAFORMAT_SUBTYPE_IEEE_FLOAT | KSDATAFORMAT_SUBTYPE_AMBISONIC_IEEE_FLOAT => {
                     if valid_bits_per_sample != container_bits {
-                        return Err(WavError::format(
-                            "wav: valid bits per sample for fmt_ext IEEE sub-type must equal bits per sample",
-                        ));
+                        return Err(WavError::format(FormatKind::MalformedFmt));
                     }
                     match container_bits {
                         32 => (SampleCodec::F32, width.max(4)),
                         64 => (SampleCodec::F64, width.max(8)),
                         _ => {
-                            return Err(WavError::format(
-                                "wav: bits per sample for fmt_ext IEEE sub-type must be 32 or 64 bits",
-                            ));
+                            return Err(WavError::format(FormatKind::InvalidSize));
                         }
                     }
                 }
                 KSDATAFORMAT_SUBTYPE_ALAW => {
                     if container_bits != 8 {
-                        return Err(WavError::format(
-                            "wav: bits per sample for fmt_ext a-law sub-type must be 8 bits",
-                        ));
+                        return Err(WavError::format(FormatKind::InvalidSize));
                     }
                     // Accept honest valid=8 and historical quirk valid=16.
                     if valid_bits_per_sample != 8 && valid_bits_per_sample != 16 {
@@ -313,9 +296,7 @@ pub(super) fn parse_fmt_chunk(
                 }
                 KSDATAFORMAT_SUBTYPE_MULAW => {
                     if container_bits != 8 {
-                        return Err(WavError::format(
-                            "wav: bits per sample for fmt_ext u-law sub-type must be 8 bits",
-                        ));
+                        return Err(WavError::format(FormatKind::InvalidSize));
                     }
                     if valid_bits_per_sample != 8 && valid_bits_per_sample != 16 {
                         (SampleCodec::Unsupported, 1)
@@ -323,7 +304,7 @@ pub(super) fn parse_fmt_chunk(
                         (SampleCodec::MuLaw, 1)
                     }
                 }
-                _ => return Err(WavError::format("wav: unsupported fmt_ext sub-type")),
+                _ => return Err(WavError::unsupported_codec(0xFFFE)),
             };
 
             // Prefer header channel count; use mask fix-up when mask is non-zero
@@ -340,9 +321,7 @@ pub(super) fn parse_fmt_chunk(
                     (0, _) => map_wave_channel_count(num_channels)?,
                     (_, Some(fixed)) if fixed >> 18 == 0 => map_wave_channel_count(num_channels)?,
                     (_, Some(_)) => {
-                        return Err(WavError::format(
-                            "wav: too many channels in mask for fmt_ext",
-                        ));
+                        return Err(WavError::format(FormatKind::ChannelLayout));
                     }
                     (_, None) => {
                         // Cannot fit mask; still accept honest nChannels when possible.
@@ -359,8 +338,9 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ms: None,
                 adpcm_ima: None,
                 big_endian: false,
+                format_tag: format,
             })
         }
-        _ => Err(WavError::format("wav: unsupported wave format")),
+        _ => Err(WavError::unsupported_codec(format)),
     }
 }

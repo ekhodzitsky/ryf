@@ -7,18 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
+### Added
+
+- `read_speech` — mix-to-mono + 2 h / 4 GiB caps (old `read` behaviour).
+- `decode_reader` — slurp `impl Read` then `decode_bytes`.
+- `WavError::Format(FormatKind)` and `UnsupportedCodec { tag }`.
+
 ### Changed
 
-- README is the crate pitch (≤100 lines). Read/write/API/benches/correctness
-  live under `docs/`. First screen says **why ryf** (WAVE family in-process,
-  zero crates, no C, caps) versus hound / Symphonia / dr_wav / ffmpeg;
-  dr_wav write includes G.711; Speed names Apple Silicon and unmeasured
-  Linux x86.
-- Docs split: [docs/compare.md](docs/compare.md) lists WAVE crates;
-  Criterion now times **wavers** 1.5 as well as hound and Symphonia.
-- Compare map covers C (dr_wav timed behind `bench-c`; libsndfile,
-  miniaudio, ffmpeg), other languages, and a fuller crates.io survey.
-  Vendored `native/dr_wav.h` is Criterion-only, not the product path.
+- **Breaking.** `read` / `DecodeOptions::default` are library defaults:
+  split channels, archival caps. Speech ingest is explicit (`read_speech` /
+  `DecodeOptions::speech`).
+- **Breaking.** `f32_to_s16le` / `s16le_to_f32` use the decode scale
+  (`/ 32768`). `-1.0` encodes as `i16::MIN`.
+- **Breaking.** `ByteSource` requires `Send`. `WavWriter` requires
+  `Read + Write + Seek` and auto-promotes RIFF → RF64 like `encode`.
+- Crate rustdoc is the API, not the GitHub README.
+- README says **why ryf** versus hound / Symphonia / dr_wav / ffmpeg.
+
+### Removed
+
+- Harvest aliases: `DecodeOptions::product_stt`, `MAX_DURATION_S` /
+  `MAX_SAMPLE_RATE` / `MAX_DECODE_SAMPLE_RATE`, `convert_s16_mono_pub`.
+- `WavError::Format(String)`.
 
 ### Performance
 

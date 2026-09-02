@@ -1,5 +1,6 @@
 use super::*;
 use crate::ChannelMode;
+use crate::FormatKind;
 use crate::error::Result;
 use crate::source::ByteSource;
 
@@ -240,11 +241,11 @@ fn test_streaming_stereo_mix_bit_exact() -> Result<()> {
     .build();
     let full = {
         let mut s = ByteSource::from_slice(&wav);
-        crate::decode_with(&mut s, &crate::DecodeOptions::default())?
+        crate::decode_with(&mut s, &crate::DecodeOptions::speech())?
     };
     let mut streamed = Vec::new();
     let mut s = ByteSource::from_slice(&wav);
-    let info = crate::decode_streaming(&mut s, &crate::DecodeOptions::default(), |b| {
+    let info = crate::decode_streaming(&mut s, &crate::DecodeOptions::speech(), |b| {
         assert_eq!(b.planar.len(), 1);
         streamed.extend_from_slice(b.planar[0]);
         Ok(())
@@ -467,8 +468,11 @@ fn test_streaming_callback_error_propagates() {
     .build();
     let mut src = ByteSource::from_slice(&wav);
     let err = crate::decode_streaming(&mut src, &crate::DecodeOptions::default(), |_| {
-        Err(crate::WavError::format("callback boom"))
+        Err(crate::WavError::format(FormatKind::InvalidOperation))
     })
     .unwrap_err();
-    assert!(err.to_string().contains("callback boom"));
+    assert!(matches!(
+        err,
+        crate::WavError::Format(FormatKind::InvalidOperation)
+    ));
 }

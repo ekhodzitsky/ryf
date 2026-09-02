@@ -37,11 +37,13 @@ cargo bench --bench wav
 cargo bench --bench wav --features bench-c   # vs dr_wav; needs a C compiler
 ```
 
-Library: `decode_bytes` / `decode_s16` / `decode_f32` / `read` /
-`read_with` / `read_s16` / `read_f32` / `decode_g711` / `probe_with` /
-`decode_streaming` / `sniff_wav` / `encode` / `encode_rf64` / `encode_s16` /
-`encode_f32` / `write` / `write_s16` / `write_f32` / `WavWriter`.
-Caps: `DecodeOptions::speech()` (default) or `unbounded()`.
+Library: `decode_bytes` / `decode_s16` / `decode_f32` / `decode_reader` /
+`read` / `read_speech` / `read_with` / `read_s16` / `read_f32` /
+`decode_g711` / `probe_with` / `decode_streaming` / `sniff_wav` / `encode` /
+`encode_rf64` / `encode_s16` / `encode_f32` / `write` / `write_s16` /
+`write_f32` / `WavWriter`.
+Caps: `DecodeOptions::default()` is `unbounded` + split;
+`speech()` / `read_speech()` mix to mono with 2 h / 4 GiB.
 
 ## Forbidden
 

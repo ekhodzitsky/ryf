@@ -1,7 +1,7 @@
 //! IMA/DVI ADPCM (0x0011) block decoder.
 
 use super::ImaAdpcmParams;
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
 
 #[cfg(test)]
@@ -29,13 +29,11 @@ pub(crate) fn for_each_ima_adpcm_block(
 ) -> Result<usize> {
     let ch = params.channels;
     if ch == 0 || ch > 2 {
-        return Err(WavError::format(
-            "wav: IMA-ADPCM supports 1 or 2 channels only",
-        ));
+        return Err(WavError::format(FormatKind::ChannelLayout));
     }
     let block = params.block_align as usize;
     if block < 4 * ch {
-        return Err(WavError::format("wav: IMA-ADPCM block_align too small"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
 
     let mut remaining = data_len;
@@ -43,8 +41,7 @@ pub(crate) fn for_each_ima_adpcm_block(
     let mut frames = 0usize;
 
     while remaining >= block as u64 {
-        mss.read_buf_exact(&mut block_buf)
-            .map_err(|e| WavError::format(format!("Error reading packet: {e}")))?;
+        mss.read_buf_exact(&mut block_buf).map_err(WavError::from)?;
         remaining -= block as u64;
 
         let decoded = if ch == 1 {
@@ -81,7 +78,7 @@ pub(crate) fn decode_ima_adpcm(
         .saturating_mul(ch);
     let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
     out.try_reserve(hint)
-        .map_err(|_| WavError::format("wav: IMA-ADPCM allocation failed"))?;
+        .map_err(|_| WavError::format(FormatKind::Adpcm))?;
     for_each_ima_adpcm_block(mss, params, data_len, max_frames, 16_000, |block| {
         out.extend_from_slice(block);
         Ok(())
@@ -114,12 +111,12 @@ fn decode_ima_nibble(nibble: u8, predictor: &mut i32, step_index: &mut i32) -> i
 
 pub(crate) fn decode_ima_block_mono(block: &[u8]) -> Result<Vec<i16>> {
     if block.len() < 4 {
-        return Err(WavError::format("wav: IMA-ADPCM short mono block"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
     let mut predictor = i32::from(i16::from_le_bytes([block[0], block[1]]));
     let mut step_index = i32::from(block[2]);
     if !(0..=88).contains(&step_index) {
-        return Err(WavError::format("wav: IMA-ADPCM step index out of range"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
 
     let mut out = Vec::with_capacity((block.len() - 4) * 2 + 1);
@@ -143,7 +140,7 @@ pub(crate) fn decode_ima_block_mono(block: &[u8]) -> Result<Vec<i16>> {
 
 pub(crate) fn decode_ima_block_stereo(block: &[u8]) -> Result<Vec<i16>> {
     if block.len() < 8 {
-        return Err(WavError::format("wav: IMA-ADPCM short stereo block"));
+        return Err(WavError::format(FormatKind::Adpcm));
     }
     let mut pred = [
         i32::from(i16::from_le_bytes([block[0], block[1]])),
@@ -152,7 +149,7 @@ pub(crate) fn decode_ima_block_stereo(block: &[u8]) -> Result<Vec<i16>> {
     let mut step_idx = [i32::from(block[2]), i32::from(block[6])];
     for &s in &step_idx {
         if !(0..=88).contains(&s) {
-            return Err(WavError::format("wav: IMA-ADPCM step index out of range"));
+            return Err(WavError::format(FormatKind::Adpcm));
         }
     }
 

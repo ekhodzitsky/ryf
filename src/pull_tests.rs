@@ -39,10 +39,11 @@ fn decode_adpcm_wrong_codec_errors() {
         adpcm_ms: None,
         adpcm_ima: None,
         big_endian: false,
+        format_tag: 1,
     };
     let err = decode_adpcm_interleaved(&mut ByteSource::from_slice(&[]), &fmt, 0, 10);
     #[cfg(feature = "adpcm")]
-    assert!(matches!(err, Err(WavError::UnsupportedCodec)));
+    assert!(matches!(err, Err(WavError::UnsupportedCodec { .. })));
     #[cfg(not(feature = "adpcm"))]
     assert!(matches!(
         err,
@@ -72,7 +73,7 @@ fn slice_and_cursor_stereo_mix_and_split_bit_exact() -> Result<()> {
     }
     let wav = riff_pcm(1, 16_000, 2, 16, &payload);
 
-    let slice_mix = crate::decode_bytes(&wav, DecodeOptions::default())?;
+    let slice_mix = crate::decode_bytes(&wav, DecodeOptions::speech())?;
     let mut cursor =
         ByteSource::from_read_seek(Cursor::new(wav.as_slice()), Some(wav.len() as u64));
     let cursor_mix = crate::decode(&mut cursor, ChannelMode::Mono, "cursor")?;

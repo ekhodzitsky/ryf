@@ -3,8 +3,9 @@
 Little-endian WAVE. Classic RIFF when sizes fit in `u32`; **RF64** when they
 do not (or via `encode_rf64` / `WavWriter::new_rf64`). No RIFX, no ADPCM
 encode. Channels `1..=26` (same ceiling as decode). Empty payload is a valid
-header (44-byte integer PCM, 58-byte f32). `WavWriter::new` does **not**
-auto-upgrade: past 4 GiB it returns `RiffTooLarge`; use `new_rf64`.
+header (44-byte integer PCM, 58-byte f32). `WavWriter::new` auto-promotes
+to RF64 when the payload would overflow `u32` (same rule as `encode`).
+`new_rf64` forces RF64 from the first byte.
 
 | | Notes |
 |---|---|
@@ -16,8 +17,6 @@ auto-upgrade: past 4 GiB it returns `RiffTooLarge`; use `new_rf64`.
 
 No `WAVEFORMATEXTENSIBLE` on write (plain `fmt ` only).
 
-Decode scale for integer PCM is `/ 32768` (s16), `/ 2^23` (s24), `/ 2^31`
-(s32). Encode pack `f32_to_s16le` uses peak **32767** (`±1.0 → ±32767`).
-That is the molv write path; it is **not** the inverse of decode.
-Round-trip through encode then decode is lossless on *length and rate*,
-not bit-exact on sample values.
+Decode and `f32_to_s16le` share the s16 scale `/ 32768` (`* 32768` then
+clamp to `i16`). `-1.0` encodes as `-32768`; `+1.0` clamps to `32767`.
+Round-trip is lossless on length and rate; `+1.0` is not bit-exact.

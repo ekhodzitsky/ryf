@@ -44,8 +44,8 @@ rustc **1.88**. Not on crates.io (`publish = false`). Default features
 (`adpcm` + `simd`) pull **no crates**.
 
 PCM drop-in below (`write_s16` / `read`). Family ingest is `decode_bytes` /
-`decode_g711`. `read` uses `speech()` caps (2 h, 192 kHz, 4 GiB planar).
-Round-trip is lossless on length and rate, not sample bits.
+`decode_g711`. `read` splits channels with archival caps. Mix + 2 h:
+`read_speech`. s16 pack uses the same `/ 32768` scale as decode.
 
 ```rust
 fn main() -> ryf::Result<()> {
@@ -60,7 +60,8 @@ fn main() -> ryf::Result<()> {
 }
 ```
 
-`read` / `decode_bytes` / `decode_g711` / `encode` / `WavWriter`.
+`read` / `read_speech` / `decode_bytes` / `decode_reader` / `decode_g711` /
+`encode` / `WavWriter`.
 `cargo run --example decode`.
 
 ## Speed

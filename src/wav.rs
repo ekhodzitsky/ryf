@@ -6,15 +6,13 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use crate::ChannelMode;
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 use crate::header::{self, SampleCodec, parse_header};
 use crate::options::DecodeOptions;
 use crate::pull::{decode_collect, ensure_adpcm_enabled, open_decode};
 use crate::source::ByteSource;
 
 pub use crate::convert::convert_s16_le_to_f32;
-#[allow(deprecated)]
-pub use crate::convert::convert_s16_mono_pub;
 pub use crate::header::ProbeCodec;
 pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 
@@ -103,7 +101,7 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
         return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
     }
     if matches!(header.fmt.codec, SampleCodec::Unsupported) {
-        return Err(WavError::UnsupportedCodec);
+        return Err(WavError::unsupported_codec(header.fmt.format_tag));
     }
     if header.fmt.codec.is_adpcm() {
         ensure_adpcm_enabled()?;
@@ -125,7 +123,7 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
             .sample_width
             .checked_mul(header.fmt.channels)
             .filter(|&n| n > 0)
-            .ok_or_else(|| WavError::format("wav: invalid frame size"))?;
+            .ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
         header.declared_data_len.map(|d| d / frame_bytes as u64)
     };
     Ok(WavProbe {
@@ -149,7 +147,7 @@ pub fn decode(
 ) -> Result<DecodedWav> {
     decode_with(
         mss,
-        &DecodeOptions::default()
+        &DecodeOptions::speech()
             .with_channel_mode(mode)
             .with_source_label(source_label),
     )
@@ -191,7 +189,7 @@ fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
         || header.fmt.big_endian
         || header.fmt.sample_width != 2
     {
-        return Err(WavError::UnsupportedCodec);
+        return Err(WavError::unsupported_codec(header.fmt.format_tag));
     }
     let available = src
         .byte_len()
@@ -204,16 +202,16 @@ fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
     if !want.is_multiple_of(2) {
         return Err(WavError::OddPcm);
     }
-    let n = usize::try_from(want).map_err(|_| WavError::format("wav: data chunk too large"))?;
+    let n = usize::try_from(want).map_err(|_| WavError::format(FormatKind::InvalidSize))?;
     if let Some(rest) = src.remaining_slice() {
         if rest.len() < n {
-            return Err(WavError::format("wav: short s16 data"));
+            return Err(WavError::format(FormatKind::Truncated));
         }
         return Ok((header.fmt.sample_rate, rest[..n].to_vec()));
     }
     let mut out = vec![0u8; n];
     src.read_buf_exact(&mut out)
-        .map_err(|e| WavError::format(format!("wav: short s16 data: {e}")))?;
+        .map_err(|_| WavError::format(FormatKind::Truncated))?;
     Ok((header.fmt.sample_rate, out))
 }
 
@@ -228,17 +226,22 @@ pub fn decode_f32(data: &[u8]) -> Result<(u32, Vec<f32>)> {
         .channels
         .into_iter()
         .next()
-        .ok_or_else(|| WavError::format("wav: missing mono plane"))?;
+        .ok_or_else(|| WavError::format(FormatKind::InvalidOperation))?;
     if mono.is_empty() {
         return Err(WavError::Empty);
     }
     Ok((decoded.sample_rate, mono))
 }
 
-/// Read a WAVE file to planar `f32` (speech caps, mixed mono).
+/// Read a WAVE file to planar `f32` (split channels, archival caps).
 ///
-/// `let wav = ryf::read("speech.wav")?;`
+/// Mix-to-mono + 2 h speech caps: [`read_speech`].
 pub fn read(path: impl AsRef<Path>) -> Result<DecodedWav> {
+    read_with(path, &DecodeOptions::default())
+}
+
+/// [`read`] with [`DecodeOptions::speech`] (mix-to-mono, 2 h / 4 GiB).
+pub fn read_speech(path: impl AsRef<Path>) -> Result<DecodedWav> {
     read_with(path, &DecodeOptions::speech())
 }
 
@@ -257,6 +260,20 @@ pub fn read_s16(path: &Path) -> Result<(u32, Vec<u8>)> {
 /// [`decode_f32`] from a filesystem path.
 pub fn read_f32(path: &Path) -> Result<(u32, Vec<f32>)> {
     decode_f32(&std::fs::read(path)?)
+}
+
+/// Slurp `reader` then [`decode_bytes`]. The slurp stops at
+/// `max_output_bytes + 1 MiB`.
+pub fn decode_reader<R: Read>(reader: R, opts: &DecodeOptions) -> Result<DecodedWav> {
+    let cap = opts.max_output_bytes.saturating_add(1024 * 1024);
+    let mut limited = reader.take(cap.saturating_add(1));
+    let mut data = Vec::new();
+    limited.read_to_end(&mut data)?;
+    let n = data.len() as u64;
+    if n > cap {
+        return Err(WavError::output_too_large(n, cap));
+    }
+    decode_bytes(&data, opts.clone())
 }
 
 #[cfg(test)]

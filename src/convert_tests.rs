@@ -3,8 +3,7 @@ use super::*;
 use crate::header::SampleCodec;
 
 #[test]
-#[allow(deprecated)]
-fn convert_s16_public_aliases_and_odd_lengths() {
+fn convert_s16_le_to_f32_matches_div() {
     // Length not multiple of 8 exercises scalar tail (and NEON tail on aarch64).
     let samples: [i16; 11] = [0, 1, -1, 1000, -1000, i16::MAX, i16::MIN, 42, -42, 7, -7];
     let mut src = Vec::with_capacity(22);
@@ -13,7 +12,6 @@ fn convert_s16_public_aliases_and_odd_lengths() {
     }
     let mut dst = vec![0.0f32; samples.len()];
     convert_s16_le_to_f32(&src, &mut dst);
-    convert_s16_mono_pub(&src, &mut dst);
     for (i, &s) in samples.iter().enumerate() {
         let expect = s as f32 / 32_768.0;
         assert!((dst[i] - expect).abs() < 1e-7, "i={i}");

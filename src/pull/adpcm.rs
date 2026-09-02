@@ -2,7 +2,7 @@
 
 use super::{DecodePlan, StreamBlock, emit_mono_block, emit_split_block};
 use crate::ChannelMode;
-use crate::error::{Result, WavError};
+use crate::error::{FormatKind, Result, WavError};
 #[cfg(test)]
 use crate::header::FmtFields;
 use crate::header::SampleCodec;
@@ -37,17 +37,17 @@ pub(crate) fn decode_adpcm_interleaved(
             let params = fmt
                 .adpcm_ms
                 .as_ref()
-                .ok_or_else(|| WavError::format("wav: missing MS-ADPCM params"))?;
+                .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             decode_ms_adpcm(mss, params, data_len, max_samples)
         }
         SampleCodec::ImaAdpcm => {
             let params = fmt
                 .adpcm_ima
                 .as_ref()
-                .ok_or_else(|| WavError::format("wav: missing IMA-ADPCM params"))?;
+                .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             decode_ima_adpcm(mss, params, data_len, max_samples)
         }
-        _ => Err(WavError::UnsupportedCodec),
+        _ => Err(WavError::unsupported_codec(0)),
     }
 }
 
@@ -73,7 +73,7 @@ fn visit_adpcm(
                 .fmt
                 .adpcm_ms
                 .as_ref()
-                .ok_or_else(|| WavError::format("wav: missing MS-ADPCM params"))?;
+                .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             for_each_ms_adpcm_block(
                 mss,
                 params,
@@ -88,7 +88,7 @@ fn visit_adpcm(
                 .fmt
                 .adpcm_ima
                 .as_ref()
-                .ok_or_else(|| WavError::format("wav: missing IMA-ADPCM params"))?;
+                .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             for_each_ima_adpcm_block(
                 mss,
                 params,
@@ -98,7 +98,7 @@ fn visit_adpcm(
                 on_block,
             )
         }
-        _ => Err(WavError::UnsupportedCodec),
+        _ => Err(WavError::unsupported_codec(0)),
     }
 }
 

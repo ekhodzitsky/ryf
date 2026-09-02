@@ -1,20 +1,18 @@
 use super::*;
 
 #[test]
-#[allow(deprecated)]
 fn channel_mode_default_and_max_decode_samples() {
-    assert_eq!(ChannelMode::default(), ChannelMode::Mono);
+    assert_eq!(ChannelMode::default(), ChannelMode::Split);
     assert_eq!(
         max_decode_samples(16_000),
-        DecodeOptions::default().max_frames(16_000)
+        DecodeOptions::speech().max_frames(16_000)
     );
     assert_eq!(
         DecodeOptions::speech().max_duration_secs,
         DEFAULT_MAX_DURATION_SECS
     );
-    assert_eq!(MAX_DURATION_S, DEFAULT_MAX_DURATION_SECS);
-    assert_eq!(MAX_SAMPLE_RATE, DEFAULT_MAX_SAMPLE_RATE);
-    assert_eq!(MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DECODE_SAMPLE_RATE);
+    assert_eq!(DecodeOptions::default().channel_mode, ChannelMode::Split);
+    assert!(DecodeOptions::default().max_output_bytes > DEFAULT_MAX_OUTPUT_BYTES);
 }
 
 #[test]
@@ -27,12 +25,11 @@ fn read_and_decoded_helpers() -> crate::Result<()> {
     assert_eq!(decoded.sample_rate, 16_000);
     assert_eq!(decoded.num_channels(), 1);
     assert_eq!(decoded.frames(), 3);
-    let split = crate::read_with(
-        tmp.path(),
-        &DecodeOptions::speech().with_channel_mode(ChannelMode::Split),
-    )?;
-    assert_eq!(split.num_channels(), 1);
+    let speech = crate::read_speech(tmp.path())?;
+    assert_eq!(speech.num_channels(), 1);
     let from_bytes = crate::decode_bytes(&wav, DecodeOptions::speech())?;
     assert_eq!(from_bytes.frames(), decoded.frames());
+    let from_reader = crate::decode_reader(wav.as_slice(), &DecodeOptions::default())?;
+    assert_eq!(from_reader.frames(), 3);
     Ok(())
 }

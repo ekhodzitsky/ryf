@@ -29,7 +29,7 @@ pub fn decode_g711(
         return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
     }
     if channels == 0 || channels > 26 {
-        return Err(WavError::UnsupportedCodec);
+        return Err(WavError::unsupported_codec(0));
     }
     let ch = usize::from(channels);
     if data.is_empty() {

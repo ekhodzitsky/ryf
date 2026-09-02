@@ -55,7 +55,7 @@ pub struct ByteSource<'a> {
 impl<'a> ByteSource<'a> {
     /// Wrap an already-boxed `Read + Seek`. Prefer [`from_slice`],
     /// [`from_file`], or [`from_read_seek`].
-    pub fn new(inner: Box<dyn ReadSeek + 'a>, byte_len: Option<u64>) -> Self {
+    pub fn new(inner: Box<dyn ReadSeek + Send + 'a>, byte_len: Option<u64>) -> Self {
         Self {
             inner,
             pos: 0,

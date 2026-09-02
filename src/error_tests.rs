@@ -4,7 +4,10 @@ use std::io;
 
 #[test]
 fn display_and_helpers_cover_all_variants() {
-    assert_eq!(WavError::format("boom").to_string(), "boom");
+    assert_eq!(
+        WavError::format(FormatKind::Truncated).to_string(),
+        "truncated WAVE chunk"
+    );
     assert_eq!(
         WavError::too_long(10.0, 5.0).to_string(),
         "Audio file too long (10s). Maximum supported: 5s."
@@ -17,14 +20,14 @@ fn display_and_helpers_cover_all_variants() {
         WavError::output_too_large(10, 5).to_string(),
         "wav: decoded output too large (10 bytes, max 5)"
     );
+    assert_eq!(WavError::NotWave.to_string(), "not a WAVE container");
     assert_eq!(
-        WavError::packet_io(io::Error::new(io::ErrorKind::UnexpectedEof, "eof")).to_string(),
-        "Error reading packet: eof"
+        WavError::unsupported_codec(0).to_string(),
+        "unsupported audio codec"
     );
-    assert_eq!(WavError::NotWave.to_string(), "Unsupported audio format");
     assert_eq!(
-        WavError::UnsupportedCodec.to_string(),
-        "Unsupported audio codec"
+        WavError::unsupported_codec(0x0007).to_string(),
+        "unsupported audio codec (format tag 0x0007)"
     );
     assert_eq!(
         WavError::StreamLengthUnknown.to_string(),
@@ -50,12 +53,12 @@ fn display_and_helpers_cover_all_variants() {
     assert!(WavError::NotWave.source().is_none());
 
     assert!(WavError::NotWave.is_format_class());
-    assert!(WavError::format("x").is_format_class());
+    assert!(WavError::format(FormatKind::MalformedFmt).is_format_class());
     assert!(WavError::StreamLengthUnknown.is_format_class());
     assert!(WavError::OddPcm.is_format_class());
     assert!(WavError::Empty.is_format_class());
     assert!(!WavError::RiffTooLarge.is_format_class());
-    assert!(!WavError::UnsupportedCodec.is_format_class());
+    assert!(!WavError::unsupported_codec(0).is_format_class());
     assert!(!WavError::sample_rate(1, 1).is_format_class());
     assert!(!WavError::output_too_large(1, 1).is_format_class());
 }

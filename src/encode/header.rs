@@ -19,7 +19,7 @@ pub(super) fn validate_spec(spec: WriteSpec) -> Result<()> {
         return Err(WavError::sample_rate(0, 1));
     }
     if spec.channels == 0 || spec.channels > MAX_CHANNELS {
-        return Err(WavError::UnsupportedCodec);
+        return Err(WavError::unsupported_codec(0));
     }
     Ok(())
 }
