@@ -1,8 +1,8 @@
 //! WAVE encode: integer PCM 8/16/24/32, IEEE f32, 1-26 channels.
 //!
 //! Classic RIFF when it fits; RF64 when the payload would overflow a `u32`
-//! size, or via [`encode_rf64`]. Drop-in molv path: [`encode_s16`] (mono) /
-//! [`encode_f32`] / [`write_s16`]. No ADPCM, no RIFX.
+//! size, or via [`encode_rf64`]. Mono PCM16 helper: [`encode_s16`] /
+//! [`write_s16`]. No ADPCM / G.711 / G.722 / RIFX encode.
 
 use std::fs::File;
 use std::io::Write;
@@ -168,7 +168,7 @@ pub fn write(path: &Path, spec: WriteSpec, pcm: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// Write a mono PCM16 WAVE file (molv drop-in).
+/// Write a mono PCM16 WAVE file.
 pub fn write_s16(path: &Path, pcm: &[u8], sample_rate: u32) -> Result<()> {
     write(path, WriteSpec::s16(sample_rate, 1), pcm)
 }

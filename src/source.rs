@@ -18,9 +18,9 @@ impl Seek for DeadInner {
     }
 }
 
-/// Object-safe `Read + Seek`.
-pub trait ReadSeek: Read + Seek {}
-impl<T: Read + Seek> ReadSeek for T {}
+/// Object-safe `Read + Seek + Send` (0.3 library contract).
+pub trait ReadSeek: Read + Seek + Send {}
+impl<T: Read + Seek + Send> ReadSeek for T {}
 
 /// Contiguous memory view for zero-copy handoff (WAVE PCM, adapters).
 enum Contiguous<'a> {
@@ -42,9 +42,9 @@ impl Contiguous<'_> {
 
 /// Seekable byte stream with exact-read helpers used by demux / decode.
 ///
-/// Memory-backed sources (`from_slice` / `from_vec`) expose a contiguous view
-/// so PCM convert can walk the `data` payload without an extra copy.
-/// File / `Read + Seek` sources stream.
+/// The inner reader is [`Send`]. Memory-backed sources (`from_slice` /
+/// `from_vec`) expose a contiguous view so PCM convert can walk the `data`
+/// payload without an extra copy. File / `Read + Seek` sources stream.
 pub struct ByteSource<'a> {
     inner: Box<dyn ReadSeek + 'a>,
     pos: u64,
@@ -53,9 +53,9 @@ pub struct ByteSource<'a> {
 }
 
 impl<'a> ByteSource<'a> {
-    /// Wrap an already-boxed `Read + Seek`. Prefer [`from_slice`],
+    /// Wrap an already-boxed `Read + Seek + Send`. Prefer [`from_slice`],
     /// [`from_file`], or [`from_read_seek`].
-    pub fn new(inner: Box<dyn ReadSeek + Send + 'a>, byte_len: Option<u64>) -> Self {
+    pub fn new(inner: Box<dyn ReadSeek + 'a>, byte_len: Option<u64>) -> Self {
         Self {
             inner,
             pos: 0,
@@ -98,10 +98,10 @@ impl<'a> ByteSource<'a> {
         }
     }
 
-    /// Arbitrary `Read + Seek` with optional known length.
+    /// Arbitrary `Read + Seek + Send` with optional known length.
     pub fn from_read_seek<'b, R>(inner: R, byte_len: Option<u64>) -> ByteSource<'b>
     where
-        R: Read + Seek + 'b,
+        R: Read + Seek + Send + 'b,
     {
         ByteSource {
             inner: Box::new(inner),

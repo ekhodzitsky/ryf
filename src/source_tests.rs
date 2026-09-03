@@ -70,6 +70,12 @@ fn ignore_bytes_seek_threshold_and_eof() -> Result<()> {
 }
 
 #[test]
+fn byte_source_is_send() {
+    fn assert_send<T: Send>() {}
+    assert_send::<ByteSource<'static>>();
+}
+
+#[test]
 fn from_read_seek_and_new() -> Result<()> {
     use std::io::Cursor;
     let data = [9u8, 8, 7, 6];

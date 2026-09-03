@@ -71,18 +71,29 @@ pub(crate) const W64_GUID_FACT: [u8; 16] = [
 /// Adding a variant is a breaking change (the enum is exhaustive).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProbeCodec {
+    /// PCM unsigned 8-bit.
     PcmU8,
+    /// PCM signed 16-bit.
     PcmS16,
+    /// PCM signed 24-bit (3-byte or 4-byte container).
     PcmS24,
+    /// PCM signed 32-bit.
     PcmS32,
+    /// IEEE float32.
     Float32,
+    /// IEEE float64.
     Float64,
+    /// G.711 A-law.
     ALaw,
+    /// G.711 mu-law.
     MuLaw,
+    /// Microsoft ADPCM (`0x0002`).
     MsAdpcm,
+    /// IMA/DVI ADPCM (`0x0011`).
     ImaAdpcm,
-    /// ITU-T G.722 SB-ADPCM (WAVE tags 0x0064 / 0x0065 / 0x028F).
+    /// ITU-T G.722 64 kbit/s (WAVE tags 0x0064 / 0x0065 / 0x028F).
     G722,
+    /// `fmt ` parsed, codec not implemented.
     Unsupported,
 }
 

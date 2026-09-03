@@ -9,7 +9,7 @@ clippy:
     cargo clippy --all-targets -- -D warnings
 
 cov:
-    cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only -- --skip proptest
+    cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --fail-under-lines 90 --summary-only -- --skip proptest
 
 bench:
     cargo bench --bench wav

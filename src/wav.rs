@@ -22,7 +22,7 @@ pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 /// track per channel in [`ChannelMode::Split`] (all of equal length).
 #[derive(Debug, Clone)]
 pub struct DecodedWav {
-    /// Sample rate from the `fmt ` chunk (Hz).
+    /// Native PCM rate (Hz). G.722 is always 16 kHz, even if `fmt ` differs.
     pub sample_rate: u32,
     /// Planar `f32`. Length 1 if mixed; otherwise one vec per channel.
     pub channels: Vec<Vec<f32>>,
@@ -45,9 +45,10 @@ impl DecodedWav {
 /// Lightweight header probe without decoding PCM.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WavProbe {
+    /// Native PCM rate (Hz). G.722 is always 16 kHz.
     pub sample_rate: u32,
     pub channels: usize,
-    /// Container bytes per sample of one channel.
+    /// Container bytes per sample of one channel (G.722: 1 encoded byte).
     pub sample_width: usize,
     pub codec: ProbeCodec,
     /// Declared PCM frames from the data chunk, when known.
@@ -82,13 +83,14 @@ pub fn sniff_is_riff_wave(mss: &mut ByteSource<'_>) -> Result<bool> {
     Ok(is_classic || is_w64)
 }
 
-/// Byte-slice sniff (syom/sluh). Same markers as [`sniff_is_riff_wave`].
+/// Byte-slice sniff. Same markers as [`sniff_is_riff_wave`].
 pub fn sniff_wav(data: &[u8]) -> bool {
     let mut source = ByteSource::from_slice(data);
     sniff_is_riff_wave(&mut source).unwrap_or(false)
 }
 
-/// Probe with speech-ingest default caps.
+/// Probe with library defaults ([`DecodeOptions::default`]: split, archival
+/// caps). Speech caps: [`probe_with`] + [`DecodeOptions::speech`].
 pub fn probe(mss: &mut ByteSource<'_>) -> Result<WavProbe> {
     probe_with(mss, &DecodeOptions::default())
 }
@@ -187,7 +189,7 @@ pub fn decode_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<Dec
     })
 }
 
-/// Molv-compat: LE PCM16 **mono** `data` bytes, no f32 convert.
+/// LE PCM16 **mono** `data` bytes, no f32 convert.
 ///
 /// Stereo, RIFX, float, and other codecs are [`WavError::UnsupportedCodec`].
 /// Empty `data` is [`WavError::Empty`]. Odd byte length is [`WavError::OddPcm`].
@@ -228,7 +230,7 @@ fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
     Ok((header.fmt.sample_rate, out))
 }
 
-/// Molv-compat: mono f32 at the file's native rate (stereo mixed).
+/// Mono f32 at the file's native rate (stereo mixed).
 /// Empty PCM is [`WavError::Empty`]. No speech duration cap.
 pub fn decode_f32(data: &[u8]) -> Result<(u32, Vec<f32>)> {
     let decoded = decode_bytes(

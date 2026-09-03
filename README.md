@@ -4,7 +4,7 @@ Just wav.
 
 Untrusted or telephony **WAVE** -> planar `f32` in-process. Zero crates on
 the default feature set, no C in the binary, no ffmpeg, no resample.
-Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, G.722, MS/IMA ADPCM,
+Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, G.722 (64 kbit/s), MS/IMA ADPCM,
 wild headers. Write RIFF PCM 8/16/24/32 + IEEE f32; **RF64** when `u32`
 overflows.
 
@@ -48,7 +48,7 @@ In-memory: `decode_bytes`. Headerless mu-law/A-law: `decode_g711`. Headerless
 G.722: `decode_g722`. `impl Read` without seek: `decode_reader`. Write:
 `encode` / `write_s16` / `WavWriter`.
 
-[read](docs/read.md) | [write](docs/write.md) | [api](docs/api.md)  | 
+[read](docs/read.md) | [write](docs/write.md) | [api](docs/api.md) |
 [benchmarks](docs/benchmarks.md) | [correctness](docs/correctness.md)
 
 ## Install

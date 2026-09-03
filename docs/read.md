@@ -8,7 +8,7 @@ Every listed codec is accepted in every listed container unless noted.
 | S24 in 4-byte containers | yes | yes | yes | yes |
 | IEEE f32 / f64 | yes | yes | yes | yes |
 | G.711 A-law / mu-law | yes | yes | yes | yes |
-| G.722 64 kbit/s (tags `0x0064` / `0x0065` / `0x028F`) | yes | yes | yes | yes |
+| G.722 64 kbit/s only (tags `0x0064` / `0x0065` / `0x028F`) | yes | yes | yes | yes |
 | MS-ADPCM, IMA/DVI ADPCM | yes | - | yes | yes |
 
 Also:
@@ -21,15 +21,17 @@ Also:
 Headerless G.711 (rate and channel count stated by the caller):
 `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`.
 
-Headerless G.722 (64 kbit/s; `sample_rate` 8000 or 16000, output always
-16 kHz): `decode_g722` / `decode_g722_mono`. WAVE G.722 also reports 16 kHz
-even when `fmt ` says 8000 (SDP clock). `0x0064` is the Asterisk/SBC alias
+Headerless G.722 (**64 kbit/s only**; `sample_rate` 8000 or 16000, output
+always 16 kHz): `decode_g722` / `decode_g722_mono`. 56/48 kbit/s packed
+streams are not decoded. WAVE G.722 always reports 16 kHz (SDP `fmt ` 8000
+or any other accepted header rate). `0x0064` is the Asterisk/SBC alias
 (mmreg lists that tag as G.726).
 
 From a path: `read` (split, archival caps) / `read_speech` (mix, 2 h) /
-`read_with`. Molv drop-ins: `read_s16` / `read_f32`. From a `File` or any
-`Read + Seek + Send`: `ByteSource::from_file` / `from_read_seek` +
-`decode_with`. From a buffer: `decode_bytes`. From `impl Read` (slurp):
-`decode_reader`. Streaming: `decode_streaming`.
+`read_with`. Mono PCM16 / mixed f32 helpers: `read_s16` / `read_f32`. From
+a `File` or any `Read + Seek + Send`: `ByteSource::from_file` /
+`from_read_seek` + `decode_with`. From a buffer: `decode_bytes`. From
+`impl Read` (slurp): `decode_reader`. Streaming: `decode_streaming`.
+Probe: `probe` (library defaults) / `probe_with`. Sniff: `sniff_wav`.
 
 Empty decode is `WavError::Empty`.

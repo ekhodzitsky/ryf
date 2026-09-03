@@ -96,7 +96,7 @@ WAVE-family or multi-format (overlap, different product):
 | [`creek`](https://crates.io/crates/creek) | Realtime disk streamer; decode is Symphonia. |
 | [`dasp-rs`](https://crates.io/crates/dasp-rs) | DSP/MIR; WAV I/O is a side door (and it resamples). |
 | [`oxiaudio-encode`](https://crates.io/crates/oxiaudio-encode) | WAV encode **via hound**. |
-| [`audio-codec-algorithms`](https://crates.io/crates/audio-codec-algorithms) / [`audio-codec`](https://crates.io/crates/audio-codec) / [`ezk-g711`](https://crates.io/crates/ezk-g711) | A-law/mu-law/G.722 **bitstreams**, no RIFF. ryf now decodes G.711/G.722 itself. |
+| [`audio-codec-algorithms`](https://crates.io/crates/audio-codec-algorithms) / [`audio-codec`](https://crates.io/crates/audio-codec) / [`ezk-g711`](https://crates.io/crates/ezk-g711) | A-law/mu-law/G.722 **bitstreams**, no RIFF. ryf decodes G.711/G.722 in-tree. |
 
 Not codecs: [rodio](https://crates.io/crates/rodio) (playback via hound/symphonia),
 [cpal](https://crates.io/crates/cpal) (host I/O),

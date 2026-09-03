@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-03
+
+### Changed
+
+- Docs / rustdoc: G.722 is **64 kbit/s only** (56/48 not decoded). WAVE
+  G.722 output / `probe` rate is always 16 kHz. `probe` uses library
+  defaults, not speech caps. Crate rustdoc names encode. `ByteSource`
+  inner is `Send` (`from_read_seek` matches the 0.3 contract).
+
+### Fixed
+
+- RIFX G.722: big-endian `fmt ` tag round-trips with headerless decode
+  (tags `0x0064` / `0x028F`).
+
 ## [0.4.0] - 2026-09-02
 
 ### Added
@@ -181,3 +195,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Split harvest modules to the 400-line impl / 500-line test caps
   (`header`, `convert`, `pull`, `adpcm`, `wav_tests`). Decode behavior is
   unchanged. README layout lists the split directories.
+
+[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/ekhodzitsky/ryf/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/ekhodzitsky/ryf/compare/v0.3.2...v0.4.0
+[0.3.2]: https://github.com/ekhodzitsky/ryf/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/ekhodzitsky/ryf/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/ekhodzitsky/ryf/releases/tag/v0.3.0

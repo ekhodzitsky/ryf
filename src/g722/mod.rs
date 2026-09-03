@@ -1,4 +1,5 @@
-//! Headerless ITU-T G.722 (64 kbit/s SB-ADPCM). Native output is 16 kHz.
+//! Headerless ITU-T G.722 SB-ADPCM. **64 kbit/s only** (8 bits per pair).
+//! Native output is 16 kHz. 56/48 kbit/s packed streams are not decoded.
 
 mod decode;
 mod tables;
@@ -44,14 +45,16 @@ pub(crate) fn output_rate(codec: SampleCodec, header_rate: u32) -> u32 {
     }
 }
 
-/// Decode headerless G.722 to planar `f32` at 16 kHz.
+/// Decode headerless G.722 (64 kbit/s) to planar `f32` at 16 kHz.
 ///
 /// `data` is packed 8 bits per 16 kHz pair (ITU / RFC 3551: high 2 bits =
 /// high band, low 6 bits = low band), interleaved one byte per channel.
-/// Empty input is [`WavError::Empty`].
+/// Empty input is [`WavError::Empty`]. 56/48 kbit/s packings are not
+/// implemented: the decoder always consumes 8 bits per pair.
 ///
 /// `sample_rate` is the caller-declared clock: `8000` (SDP convention) or
-/// `16000`. Output [`DecodedWav::sample_rate`] is always 16 kHz.
+/// `16000` (other rates are [`WavError::UnsupportedSampleRate`]). Output
+/// [`DecodedWav::sample_rate`] is always 16 kHz.
 pub fn decode_g722(
     data: &[u8],
     sample_rate: u32,
@@ -96,7 +99,7 @@ pub fn decode_g722(
     })
 }
 
-/// Headerless G.722, mono, [`DecodeOptions::speech`].
+/// Headerless G.722 (64 kbit/s), mono, [`DecodeOptions::speech`].
 pub fn decode_g722_mono(data: &[u8]) -> Result<DecodedWav> {
     decode_g722(data, RATE, 1, &DecodeOptions::speech())
 }

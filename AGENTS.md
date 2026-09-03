@@ -18,8 +18,8 @@ native sample rate.
   via `cc` for Criterion only - never linked into the library.
 - Encode is PCM U8/S16/S24/S32 + IEEE f32, 1-26 ch: classic RIFF when it
   fits, RF64 when it does not (`encode_rf64` / `WavWriter::new_rf64` to
-  force). Molv drop-in `encode_s16` (mono) / `encode_f32` / `write_s16`.
-  No ADPCM/RIFX write.
+  force). Mono PCM16 helper `encode_s16` / `write_s16`; `encode_f32`.
+  No ADPCM / G.711 / G.722 / RIFX encode.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Slogan is **Just wav.** Not a family prefix.

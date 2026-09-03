@@ -3,7 +3,9 @@
 //! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
 //! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /
 //! [`DecodeOptions::speech`]. G.711 / G.722: WAVE tags plus headerless
-//! [`decode_g711`] / [`decode_g722`].
+//! [`decode_g711`] / [`decode_g722`] (G.722 is 64 kbit/s only; output 16 kHz).
+//! Write: PCM U8/S16/S24/S32 + IEEE f32, RIFF or RF64 ([`encode`] /
+//! [`WavWriter`]). No ADPCM / G.711 / G.722 / RIFX encode.
 //!
 //! [`DecodedWav`], [`WavError`], [`WriteSpec`]. GitHub README is the crate
 //! pitch; this page is the API.

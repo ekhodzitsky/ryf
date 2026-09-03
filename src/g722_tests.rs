@@ -117,6 +117,43 @@ fn wave_tags_match_headerless() -> crate::Result<()> {
     Ok(())
 }
 
+fn wrap_g722_rifx(raw: &[u8], tag: u16) -> Vec<u8> {
+    let data_len = raw.len() as u32;
+    let mut w = Vec::with_capacity(46 + raw.len());
+    w.extend_from_slice(b"RIFX");
+    w.extend_from_slice(&(38 + data_len).to_be_bytes());
+    w.extend_from_slice(b"WAVE");
+    w.extend_from_slice(b"fmt ");
+    w.extend_from_slice(&18u32.to_be_bytes());
+    w.extend_from_slice(&tag.to_be_bytes());
+    w.extend_from_slice(&1u16.to_be_bytes());
+    w.extend_from_slice(&16_000u32.to_be_bytes());
+    w.extend_from_slice(&8_000u32.to_be_bytes());
+    w.extend_from_slice(&1u16.to_be_bytes());
+    w.extend_from_slice(&4u16.to_be_bytes());
+    w.extend_from_slice(&0u16.to_be_bytes());
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&data_len.to_be_bytes());
+    w.extend_from_slice(raw);
+    w
+}
+
+#[test]
+fn rifx_g722_matches_headerless() -> crate::Result<()> {
+    let raw: Vec<u8> = (0u8..=63).collect();
+    let from_raw = decode_g722_mono(&raw)?;
+    for tag in [0x0064u16, 0x028F] {
+        let wav = wrap_g722_rifx(&raw, tag);
+        let p = probe(&mut ByteSource::from_slice(&wav))?;
+        assert_eq!(p.codec, ProbeCodec::G722, "tag {tag:#06x}");
+        assert_eq!(p.sample_rate, 16_000);
+        let from_wav = decode_bytes(&wav, DecodeOptions::default())?;
+        assert_eq!(from_wav.sample_rate, 16_000);
+        assert_eq!(from_raw.channels[0], from_wav.channels[0], "tag {tag:#06x}");
+    }
+    Ok(())
+}
+
 #[test]
 fn headerless_stereo_matches_wave() -> crate::Result<()> {
     let raw: Vec<u8> = (0u8..=31).flat_map(|b| [b, b ^ 0x5a]).collect();

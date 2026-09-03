@@ -10,9 +10,12 @@ Output is **planar `f32`** at the file's native sample rate. No resample.
 Streaming (`decode_streaming`) shares the convert kernels and keeps peak
 RAM at ~256 KiB of source PCM plus one planar block.
 
-Headerless telephony: `decode_g711` / `decode_g722`. G.722 is 64 kbit/s
-SB-ADPCM; output is always 16 kHz. WAVE tags `0x0064` (Asterisk/SBC),
-`0x0065` (mmreg), `0x028F` (ffmpeg). `probe` reports `ProbeCodec::G722`.
+Headerless telephony: `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`,
+`decode_g722` / `decode_g722_mono`. G.722 is **64 kbit/s only** (56/48 not
+decoded); output is always 16 kHz. WAVE tags `0x0064` (Asterisk/SBC),
+`0x0065` (mmreg), `0x028F` (ffmpeg). G.722 is always on (not the `adpcm`
+feature). `probe` / `probe_with` / `sniff_wav`; G.722 probe is
+`ProbeCodec::G722`. Pack helpers: `f32_to_s16le` / `s16le_to_f32`.
 
 ## Caps
 
@@ -31,7 +34,7 @@ corrupt header cannot request petabytes from one multiply.
 | Feature | Default | Effect |
 |---|---|---|
 | `adpcm` | yes | MS + IMA/DVI ADPCM (`0x0002` / `0x0011`) |
-| `simd` | yes | NEON (aarch64) + SSE (x86) s16->f32, stereo mix/split, f32 copy. Bit-exact with the scalar kernels. |
+| `simd` | yes | NEON (aarch64) + SSE4.1/SSE2 (x86) s16->f32, stereo mix/split, f32 copy. Bit-exact with the scalar kernels. |
 | `bench-c` | no | Vendored dr_wav for Criterion. Needs a C compiler. **Not** used by the library. |
 
 Default features pull **no crates**.
@@ -54,6 +57,9 @@ Typed `WavError`. No `anyhow`, no `thiserror`.
 | `OddPcm` | PCM byte length is not a whole number of frames |
 | `Empty` | decode produced zero samples |
 | `RiffTooLarge` | size overflow when RF64 is not available |
+
+`FormatKind`: Truncated, MalformedFmt, MalformedChunk, MissingChunk,
+ChannelLayout, InvalidSize, UnsupportedWaveFormat, Adpcm, InvalidOperation.
 
 `is_format_class()` is the NotWave / Format / StreamLengthUnknown / OddPcm /
 Empty bucket for higher layers.
