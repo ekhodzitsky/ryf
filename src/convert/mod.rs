@@ -334,6 +334,7 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
         SampleCodec::MsAdpcm
         | SampleCodec::ImaAdpcm
         | SampleCodec::G722
+        | SampleCodec::Gsm
         | SampleCodec::Unsupported => 0.0,
     }
 }

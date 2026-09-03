@@ -9,6 +9,7 @@ Every listed codec is accepted in every listed container unless noted.
 | IEEE f32 / f64 | yes | yes | yes | yes |
 | G.711 A-law / mu-law | yes | yes | yes | yes |
 | G.722 64 kbit/s only (tags `0x0064` / `0x0065` / `0x028F`) | yes | yes | yes | yes |
+| GSM 06.10 / wav49 (`0x0031`, 65-byte blocks) | yes | yes | yes | yes |
 | MS-ADPCM, IMA/DVI ADPCM | yes | - | yes | yes |
 
 Also:
@@ -26,6 +27,11 @@ always 16 kHz): `decode_g722` / `decode_g722_mono`. 56/48 kbit/s packed
 streams are not decoded. WAVE G.722 always reports 16 kHz (SDP `fmt ` 8000
 or any other accepted header rate). `0x0064` is the Asterisk/SBC alias
 (mmreg lists that tag as G.726).
+
+Headerless Microsoft GSM 06.10 / wav49 (`sample_rate` 8000, 65-byte
+blocks): `decode_gsm` / `decode_gsm_mono`. WAVE tag `0x0031`. Output keeps
+the `fmt ` rate (8 kHz on Asterisk wav49). 33-byte toast frames and MSN
+variable block sizes (41-64) are not decoded.
 
 From a path: `read` (split, archival caps) / `read_speech` (mix, 2 h) /
 `read_with`. Mono PCM16 / mixed f32 helpers: `read_s16` / `read_f32`. From

@@ -19,6 +19,7 @@ Same classic RIFF clip (2 s @ 16 kHz -> mixed planar `f32`). Numbers:
 | RIFX / RF64 / BW64 / Wave64 | yes | no | limited | no | RF64 + Wave64; not RIFX write |
 | G.711 | yes | no | yes | no | yes |
 | G.722 | yes | no | no | no | no |
+| GSM 06.10 / wav49 | yes | no | no | no | no |
 | MS / IMA ADPCM | yes (`adpcm`) | no | limited | no | yes |
 | Write | RIFF + RF64 PCM + f32 | PCM/IEEE, extensible | **no** | PCM/IEEE (path) | PCM/IEEE/A-law/mu-law (no ADPCM write) |
 | Default deps | **none** | none | several | several | none (single `.h`) |
@@ -96,7 +97,7 @@ WAVE-family or multi-format (overlap, different product):
 | [`creek`](https://crates.io/crates/creek) | Realtime disk streamer; decode is Symphonia. |
 | [`dasp-rs`](https://crates.io/crates/dasp-rs) | DSP/MIR; WAV I/O is a side door (and it resamples). |
 | [`oxiaudio-encode`](https://crates.io/crates/oxiaudio-encode) | WAV encode **via hound**. |
-| [`audio-codec-algorithms`](https://crates.io/crates/audio-codec-algorithms) / [`audio-codec`](https://crates.io/crates/audio-codec) / [`ezk-g711`](https://crates.io/crates/ezk-g711) | A-law/mu-law/G.722 **bitstreams**, no RIFF. ryf decodes G.711/G.722 in-tree. |
+| [`audio-codec-algorithms`](https://crates.io/crates/audio-codec-algorithms) / [`audio-codec`](https://crates.io/crates/audio-codec) / [`ezk-g711`](https://crates.io/crates/ezk-g711) | A-law/mu-law/G.722 **bitstreams**, no RIFF. ryf decodes G.711/G.722/GSM in-tree. |
 
 Not codecs: [rodio](https://crates.io/crates/rodio) (playback via hound/symphonia),
 [cpal](https://crates.io/crates/cpal) (host I/O),

@@ -93,6 +93,8 @@ pub enum ProbeCodec {
     ImaAdpcm,
     /// ITU-T G.722 64 kbit/s (WAVE tags 0x0064 / 0x0065 / 0x028F).
     G722,
+    /// Microsoft GSM 06.10 / wav49 (`0x0031`).
+    Gsm,
     /// `fmt ` parsed, codec not implemented.
     Unsupported,
 }
@@ -114,6 +116,7 @@ pub(crate) enum SampleCodec {
     MsAdpcm,
     ImaAdpcm,
     G722,
+    Gsm,
     Unsupported,
 }
 
@@ -131,6 +134,7 @@ impl SampleCodec {
             SampleCodec::MsAdpcm => ProbeCodec::MsAdpcm,
             SampleCodec::ImaAdpcm => ProbeCodec::ImaAdpcm,
             SampleCodec::G722 => ProbeCodec::G722,
+            SampleCodec::Gsm => ProbeCodec::Gsm,
             SampleCodec::Unsupported => ProbeCodec::Unsupported,
         }
     }
@@ -174,6 +178,8 @@ pub(crate) const WAVE_FORMAT_IEEE_FLOAT: u16 = 0x0003;
 pub(crate) const WAVE_FORMAT_ALAW: u16 = 0x0006;
 pub(crate) const WAVE_FORMAT_MULAW: u16 = 0x0007;
 pub(crate) const WAVE_FORMAT_ADPCM_IMA: u16 = 0x0011;
+/// Microsoft GSM 06.10 (Asterisk wav49).
+pub(crate) const WAVE_FORMAT_GSM610: u16 = 0x0031;
 /// Asterisk / SBC / Cisco G.722-in-WAV (mmreg names this G.726; same codec
 /// as 0x028F in the telephony files this crate ingests).
 pub(crate) const WAVE_FORMAT_G722_ASTERISK: u16 = 0x0064;

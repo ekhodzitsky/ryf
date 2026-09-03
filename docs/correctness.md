@@ -1,8 +1,8 @@
 # Correctness
 
 - Differential suite vs **ffmpeg** (bit-exact `f32` on lossless PCM / G.711,
-  and G.722 decode of the same bitstream) when `ffmpeg` is on `PATH`. ffmpeg
-  is a **test oracle**, not a runtime dep.
+  and G.722 / GSM `gsm_ms` decode of the same bitstream) when `ffmpeg` is
+  on `PATH`. ffmpeg is a **test oracle**, not a runtime dep.
   NaN payloads compare equal (ffmpeg canonicalizes quiet NaN; we pass bits
   through). Finite samples stay bit-exact.
 - SIMD paths match scalar bit-for-bit.

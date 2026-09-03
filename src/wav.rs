@@ -23,6 +23,7 @@ pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 #[derive(Debug, Clone)]
 pub struct DecodedWav {
     /// Native PCM rate (Hz). G.722 is always 16 kHz, even if `fmt ` differs.
+    /// GSM keeps the `fmt ` rate (8 kHz on wav49).
     pub sample_rate: u32,
     /// Planar `f32`. Length 1 if mixed; otherwise one vec per channel.
     pub channels: Vec<Vec<f32>>,
@@ -45,10 +46,11 @@ impl DecodedWav {
 /// Lightweight header probe without decoding PCM.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WavProbe {
-    /// Native PCM rate (Hz). G.722 is always 16 kHz.
+    /// Native PCM rate (Hz). G.722 is always 16 kHz; GSM keeps `fmt `.
     pub sample_rate: u32,
     pub channels: usize,
-    /// Container bytes per sample of one channel (G.722: 1 encoded byte).
+    /// Container bytes per sample of one channel (G.722: 1 encoded byte;
+    /// GSM: 65-byte MS-GSM block).
     pub sample_width: usize,
     pub codec: ProbeCodec,
     /// Declared PCM frames from the data chunk, when known.
@@ -117,6 +119,14 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
             Some(d) => Some(crate::g722::pcm_frames_capped(
                 d,
                 header.fmt.channels,
+                header.declared_sample_count,
+            )),
+            None => header.declared_sample_count,
+        }
+    } else if header.fmt.codec == SampleCodec::Gsm {
+        match header.declared_data_len {
+            Some(d) => Some(crate::gsm::pcm_frames_capped(
+                d,
                 header.declared_sample_count,
             )),
             None => header.declared_sample_count,

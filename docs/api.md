@@ -11,11 +11,13 @@ Streaming (`decode_streaming`) shares the convert kernels and keeps peak
 RAM at ~256 KiB of source PCM plus one planar block.
 
 Headerless telephony: `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`,
-`decode_g722` / `decode_g722_mono`. G.722 is **64 kbit/s only** (56/48 not
-decoded); output is always 16 kHz. WAVE tags `0x0064` (Asterisk/SBC),
-`0x0065` (mmreg), `0x028F` (ffmpeg). G.722 is always on (not the `adpcm`
-feature). `probe` / `probe_with` / `sniff_wav`; G.722 probe is
-`ProbeCodec::G722`. Pack helpers: `f32_to_s16le` / `s16le_to_f32`.
+`decode_g722` / `decode_g722_mono`, `decode_gsm` / `decode_gsm_mono`. G.722
+is **64 kbit/s only** (56/48 not decoded); output is always 16 kHz. WAVE
+tags `0x0064` (Asterisk/SBC), `0x0065` (mmreg), `0x028F` (ffmpeg). GSM is
+Microsoft GSM 06.10 / wav49, WAVE tag `0x0031`, 8 kHz, 65-byte blocks.
+G.722 and GSM are always on (not the `adpcm` feature). `probe` /
+`probe_with` / `sniff_wav`; G.722 probe is `ProbeCodec::G722`, GSM is
+`ProbeCodec::Gsm`. Pack helpers: `f32_to_s16le` / `s16le_to_f32`.
 
 ## Caps
 

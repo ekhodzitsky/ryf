@@ -1,4 +1,4 @@
-//! `fmt ` chunk body (PCM / IEEE / G.711 / G.722 / ADPCM / EXTENSIBLE).
+//! `fmt ` chunk body (PCM / IEEE / G.711 / G.722 / GSM / ADPCM / EXTENSIBLE).
 
 use super::riff::{read_u16_endian, read_u32_endian};
 use super::{
@@ -6,11 +6,12 @@ use super::{
     KSDATAFORMAT_SUBTYPE_AMBISONIC_PCM, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
     KSDATAFORMAT_SUBTYPE_MULAW, KSDATAFORMAT_SUBTYPE_PCM, SampleCodec, WAVE_FORMAT_ADPCM_G722,
     WAVE_FORMAT_ADPCM_IMA, WAVE_FORMAT_ADPCM_MS, WAVE_FORMAT_ALAW, WAVE_FORMAT_EXTENSIBLE,
-    WAVE_FORMAT_G722_ADPCM, WAVE_FORMAT_G722_ASTERISK, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_MULAW,
-    WAVE_FORMAT_PCM, container_width, fix_wave_channel_mask, map_ambisonic_channel_count,
-    map_wave_channel_count, pcm_codec_for,
+    WAVE_FORMAT_G722_ADPCM, WAVE_FORMAT_G722_ASTERISK, WAVE_FORMAT_GSM610, WAVE_FORMAT_IEEE_FLOAT,
+    WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width, fix_wave_channel_mask,
+    map_ambisonic_channel_count, map_wave_channel_count, pcm_codec_for,
 };
 use crate::error::{FormatKind, Result, WavError};
+use crate::gsm::MS_BLOCK;
 use crate::source::ByteSource;
 
 #[cfg(feature = "adpcm")]
@@ -18,6 +19,24 @@ use crate::adpcm::{ImaAdpcmParams, MsAdpcmParams};
 
 #[cfg(not(feature = "adpcm"))]
 use super::adpcm_types::{ImaAdpcmParams, MsAdpcmParams};
+
+/// Skip `cbSize` plus extra bytes after the 16-byte `fmt ` core.
+fn skip_fmt_extra(mss: &mut ByteSource<'_>, chunk_len: u32, big_endian: bool) -> Result<()> {
+    if chunk_len >= 18 {
+        let extra_size = read_u16_endian(mss, big_endian)?;
+        let rem = chunk_len.saturating_sub(18);
+        let skip = u64::from(extra_size).min(u64::from(rem));
+        if skip > 0 {
+            mss.ignore_bytes(skip)?;
+        }
+        if rem > u32::from(extra_size) {
+            mss.ignore_bytes(u64::from(rem - u32::from(extra_size)))?;
+        }
+    } else if chunk_len > 16 {
+        mss.ignore_bytes(u64::from(chunk_len - 16))?;
+    }
+    Ok(())
+}
 
 pub(super) fn parse_fmt_chunk(
     mss: &mut ByteSource<'_>,
@@ -110,23 +129,7 @@ pub(super) fn parse_fmt_chunk(
         | WAVE_FORMAT_G722_ADPCM
         | WAVE_FORMAT_ADPCM_G722 => {
             // G.711 / G.722: canonical is 18; accept 16 and longer wild sizes.
-            if chunk_len < 16 {
-                return Err(WavError::format(FormatKind::MalformedFmt));
-            }
-            if chunk_len >= 18 {
-                let extra_size = read_u16_endian(mss, big_endian)?;
-                let already = 18u32;
-                let rem = chunk_len.saturating_sub(already);
-                let skip = u64::from(extra_size).min(u64::from(rem));
-                if skip > 0 {
-                    mss.ignore_bytes(skip)?;
-                }
-                if rem > extra_size as u32 {
-                    mss.ignore_bytes(u64::from(rem - u32::from(extra_size)))?;
-                }
-            } else if chunk_len > 16 {
-                mss.ignore_bytes(u64::from(chunk_len - 16))?;
-            }
+            skip_fmt_extra(mss, chunk_len, big_endian)?;
             let codec = match format {
                 WAVE_FORMAT_ALAW => SampleCodec::ALaw,
                 WAVE_FORMAT_MULAW => SampleCodec::MuLaw,
@@ -138,6 +141,31 @@ pub(super) fn parse_fmt_chunk(
                 channels,
                 sample_rate,
                 sample_width: 1,
+                adpcm_ms: None,
+                adpcm_ima: None,
+                big_endian: false,
+                format_tag: format,
+            })
+        }
+        WAVE_FORMAT_GSM610 => {
+            let channels = map_wave_channel_count(num_channels)?;
+            if channels != 1 {
+                return Err(WavError::format(FormatKind::ChannelLayout));
+            }
+            skip_fmt_extra(mss, chunk_len, big_endian)?;
+            let ba = if block_align == 0 {
+                MS_BLOCK as u16
+            } else {
+                block_align
+            };
+            if usize::from(ba) != MS_BLOCK {
+                return Err(WavError::format(FormatKind::InvalidSize));
+            }
+            Ok(FmtFields {
+                codec: SampleCodec::Gsm,
+                channels,
+                sample_rate,
+                sample_width: MS_BLOCK,
                 adpcm_ms: None,
                 adpcm_ima: None,
                 big_endian: false,

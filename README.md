@@ -4,9 +4,9 @@ Just wav.
 
 Untrusted or telephony **WAVE** -> planar `f32` in-process. Zero crates on
 the default feature set, no C in the binary, no ffmpeg, no resample.
-Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, G.722 (64 kbit/s), MS/IMA ADPCM,
-wild headers. Write RIFF PCM 8/16/24/32 + IEEE f32; **RF64** when `u32`
-overflows.
+Read RIFF / RIFX / RF64 / BW64 / Sony Wave64, G.711, G.722 (64 kbit/s),
+GSM 06.10 / wav49 (`0x0031`), MS/IMA ADPCM, wild headers. Write RIFF PCM
+8/16/24/32 + IEEE f32; **RF64** when `u32` overflows.
 
 [![crates.io](https://img.shields.io/crates/v/ryf.svg)](https://crates.io/crates/ryf)
 [![docs.rs](https://img.shields.io/docsrs/ryf)](https://docs.rs/ryf)
@@ -16,8 +16,9 @@ overflows.
 [![deps](https://img.shields.io/badge/deps-zero-success.svg)](Cargo.toml)
 
 **For:** speech ingest, phone recordings, user `.wav` uploads that
-[hound](https://github.com/ruuda/hound) will not open (mu-law, G.722, ADPCM,
-RF64, broken `fmt`). **Not for:** a player, a DAW, FLAC/MP3, resampling to 16 kHz.
+[hound](https://github.com/ruuda/hound) will not open (mu-law, G.722, GSM,
+ADPCM, RF64, broken `fmt`). **Not for:** a player, a DAW, FLAC/MP3,
+resampling to 16 kHz.
 
 [hound](https://github.com/ruuda/hound) is PCM/IEEE RIFF.
 [symphonia](https://github.com/pdeljanov/Symphonia) is a media pipeline.
@@ -45,8 +46,8 @@ fn main() -> ryf::Result<()> {
 ```
 
 In-memory: `decode_bytes`. Headerless mu-law/A-law: `decode_g711`. Headerless
-G.722: `decode_g722`. `impl Read` without seek: `decode_reader`. Write:
-`encode` / `write_s16` / `WavWriter`.
+G.722: `decode_g722`. Headerless GSM: `decode_gsm`. `impl Read` without
+seek: `decode_reader`. Write: `encode` / `write_s16` / `WavWriter`.
 
 [read](docs/read.md) | [write](docs/write.md) | [api](docs/api.md) |
 [benchmarks](docs/benchmarks.md) | [correctness](docs/correctness.md)
@@ -55,7 +56,7 @@ G.722: `decode_g722`. `impl Read` without seek: `decode_reader`. Write:
 
 ```toml
 [dependencies]
-ryf = "0.4"
+ryf = "0.5"
 ```
 
 rustc **1.88**. Default features (`adpcm` + `simd`) pull **no crates**.
@@ -71,7 +72,7 @@ dr_wav. Cache-hot clip, not a file on disk.
 
 ## Not this
 
-ADPCM / RIFX / G.711 / G.722 encode. GSM, MPEG-in-WAV. Resample. Async.
+ADPCM / RIFX / G.711 / G.722 / GSM encode. MPEG-in-WAV. Resample. Async.
 `mmap`. Not a player. ffmpeg is a **test oracle**, not a runtime dep.
 
 MIT OR Apache-2.0. [CHANGELOG](CHANGELOG.md).

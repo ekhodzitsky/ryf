@@ -19,11 +19,11 @@ native sample rate.
 - Encode is PCM U8/S16/S24/S32 + IEEE f32, 1-26 ch: classic RIFF when it
   fits, RF64 when it does not (`encode_rf64` / `WavWriter::new_rf64` to
   force). Mono PCM16 helper `encode_s16` / `write_s16`; `encode_f32`.
-  No ADPCM / G.711 / G.722 / RIFX encode.
+  No ADPCM / G.711 / G.722 / GSM / RIFX encode.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Slogan is **Just wav.** Not a family prefix.
-  Published on crates.io (`ryf = "0.4"`).
+  Published on crates.io (`ryf = "0.5"`).
 
 ## How it runs
 
@@ -40,7 +40,7 @@ cargo bench --bench wav --features bench-c   # vs dr_wav; needs a C compiler
 
 Library: `decode_bytes` / `decode_s16` / `decode_f32` / `decode_reader` /
 `read` / `read_speech` / `read_with` / `read_s16` / `read_f32` /
-`decode_g711` / `decode_g722` / `probe_with` / `decode_streaming` /
+`decode_g711` / `decode_g722` / `decode_gsm` / `probe_with` / `decode_streaming` /
 `sniff_wav` / `encode` /
 `encode_rf64` / `encode_s16` / `encode_f32` / `write` / `write_s16` /
 `write_f32` / `WavWriter`.
@@ -52,7 +52,7 @@ Caps: `DecodeOptions::default()` is `unbounded` + split;
 - Cloud APIs
 - Python / PyO3 / ffmpeg on the product path (ffmpeg is a **test oracle**)
 - Extra crates on the default feature set
-- ADPCM / RIFX / G.711 / G.722 encode
+- ADPCM / RIFX / G.711 / G.722 / GSM encode
 - Shipping long PCM / listen dumps in git
   (tiny ADPCM vectors in `fixtures/` are allowed)
 

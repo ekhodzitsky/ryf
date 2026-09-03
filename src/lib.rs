@@ -2,10 +2,11 @@
 //!
 //! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
 //! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /
-//! [`DecodeOptions::speech`]. G.711 / G.722: WAVE tags plus headerless
-//! [`decode_g711`] / [`decode_g722`] (G.722 is 64 kbit/s only; output 16 kHz).
-//! Write: PCM U8/S16/S24/S32 + IEEE f32, RIFF or RF64 ([`encode`] /
-//! [`WavWriter`]). No ADPCM / G.711 / G.722 / RIFX encode.
+//! [`DecodeOptions::speech`]. G.711 / G.722 / GSM: WAVE tags plus headerless
+//! [`decode_g711`] / [`decode_g722`] / [`decode_gsm`] (G.722 is 64 kbit/s
+//! only, output 16 kHz; GSM is 8 kHz wav49). Write: PCM U8/S16/S24/S32 +
+//! IEEE f32, RIFF or RF64 ([`encode`] / [`WavWriter`]). No ADPCM / G.711 /
+//! G.722 / GSM / RIFX encode.
 //!
 //! [`DecodedWav`], [`WavError`], [`WriteSpec`]. GitHub README is the crate
 //! pitch; this page is the API.
@@ -29,6 +30,7 @@ mod encode;
 mod error;
 mod g711;
 mod g722;
+mod gsm;
 pub(crate) mod header;
 mod options;
 mod pull;
@@ -44,6 +46,7 @@ pub use encode::{
 pub use error::{FormatKind, Result, WavError};
 pub use g711::{G711Law, decode_g711, decode_g711_alaw, decode_g711_mulaw};
 pub use g722::{decode_g722, decode_g722_mono};
+pub use gsm::{decode_gsm, decode_gsm_mono};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,
     DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,

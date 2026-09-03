@@ -9,6 +9,7 @@ use crate::source::ByteSource;
 mod adpcm;
 mod g711;
 mod g722;
+mod gsm;
 mod pcm;
 mod stream;
 
@@ -157,6 +158,10 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
             crate::g722::pcm_frames_capped(data_len, channels, header.declared_sample_count);
         reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
         (channels, frames as usize)
+    } else if header.fmt.codec == SampleCodec::Gsm {
+        let frames = crate::gsm::pcm_frames_capped(data_len, header.declared_sample_count);
+        reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
+        (crate::gsm::MS_BLOCK, frames as usize)
     } else {
         let frame_bytes = sample_width
             .checked_mul(channels)
@@ -242,6 +247,9 @@ where
     }
     if plan.codec == SampleCodec::G722 {
         return g722::pull_g722(mss, plan, &mut on_block);
+    }
+    if plan.codec == SampleCodec::Gsm {
+        return gsm::pull_gsm(mss, plan, &mut on_block);
     }
 
     let frame_bytes = plan.frame_bytes;

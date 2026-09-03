@@ -2,7 +2,7 @@
 //!
 //! Classic RIFF when it fits; RF64 when the payload would overflow a `u32`
 //! size, or via [`encode_rf64`]. Mono PCM16 helper: [`encode_s16`] /
-//! [`write_s16`]. No ADPCM / G.711 / G.722 / RIFX encode.
+//! [`write_s16`]. No ADPCM / G.711 / G.722 / GSM / RIFX encode.
 
 use std::fs::File;
 use std::io::Write;

@@ -227,6 +227,7 @@ fn convert_sample_all_codecs_le_and_be() {
     assert_eq!(convert_sample(SampleCodec::MsAdpcm, &[0], false), 0.0);
     assert_eq!(convert_sample(SampleCodec::ImaAdpcm, &[0], false), 0.0);
     assert_eq!(convert_sample(SampleCodec::G722, &[0], false), 0.0);
+    assert_eq!(convert_sample(SampleCodec::Gsm, &[0], false), 0.0);
     assert_eq!(convert_sample(SampleCodec::Unsupported, &[0], false), 0.0);
 }
 
