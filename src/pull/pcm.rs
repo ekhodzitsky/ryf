@@ -1,7 +1,5 @@
 //! Exact-size PCM collect (hot fill paths).
 
-use std::io::Seek;
-
 use super::{DecodePlan, check_duration, pcm_short, pull_decode, scratch_frames, uninit_f32_vec};
 use crate::ChannelMode;
 use crate::convert::{
@@ -146,8 +144,6 @@ fn fill_mono_s16(
     max_samples: usize,
     sample_rate: u32,
 ) -> Result<()> {
-    use std::io::SeekFrom;
-
     let total = out.len();
     if total > max_samples {
         return check_duration(total, max_samples, sample_rate);
@@ -159,8 +155,7 @@ fn fill_mono_s16(
             return Err(pcm_short("wav: short s16 data"));
         }
         convert_s16_mono(&rest[..need], out);
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(());
     }
     let block = scratch_frames(2, total);
@@ -188,8 +183,6 @@ fn fill_mix_s16(
     max_samples: usize,
     sample_rate: u32,
 ) -> Result<()> {
-    use std::io::SeekFrom;
-
     let total = out.len();
     if total > max_samples {
         return check_duration(total, max_samples, sample_rate);
@@ -200,8 +193,7 @@ fn fill_mix_s16(
             return Err(pcm_short("wav: short s16 mix data"));
         }
         mix_s16_le_to_f32(&rest[..need], out, channels);
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(());
     }
     let block = scratch_frames(frame_bytes, total);
@@ -230,8 +222,6 @@ fn fill_mono_f32(
     max_samples: usize,
     sample_rate: u32,
 ) -> Result<()> {
-    use std::io::SeekFrom;
-
     let total = out.len();
     if total > max_samples {
         return check_duration(total, max_samples, sample_rate);
@@ -242,8 +232,7 @@ fn fill_mono_f32(
             return Err(pcm_short("wav: short f32 data"));
         }
         convert_f32_mono(&rest[..need], out);
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(());
     }
     let block = scratch_frames(4, total);
@@ -270,8 +259,6 @@ fn fill_split_s16(
     max_samples: usize,
     sample_rate: u32,
 ) -> Result<Vec<Vec<f32>>> {
-    use std::io::SeekFrom;
-
     if total_frames > max_samples {
         check_duration(total_frames, max_samples, sample_rate)?;
     }
@@ -287,8 +274,7 @@ fn fill_split_s16(
             let mut planes: Vec<&mut [f32]> = out.iter_mut().map(|c| c.as_mut_slice()).collect();
             split_s16_le_to_f32(&rest[..need], &mut planes);
         }
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(out);
     }
     let block = scratch_frames(frame_bytes, total_frames);

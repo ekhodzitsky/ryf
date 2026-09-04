@@ -61,4 +61,13 @@ fn display_and_helpers_cover_all_variants() {
     assert!(!WavError::unsupported_codec(0).is_format_class());
     assert!(!WavError::sample_rate(1, 1).is_format_class());
     assert!(!WavError::output_too_large(1, 1).is_format_class());
+
+    assert!(matches!(
+        WavError::packet_io(io::Error::new(io::ErrorKind::UnexpectedEof, "short")),
+        WavError::Format(FormatKind::Truncated)
+    ));
+    assert!(matches!(
+        WavError::packet_io(io::Error::other("disk")),
+        WavError::Io(_)
+    ));
 }

@@ -14,8 +14,10 @@ mod pcm;
 mod stream;
 
 #[cfg(test)]
+pub(crate) use adpcm::adpcm_est_frames;
+#[cfg(test)]
 pub(crate) use adpcm::decode_adpcm_interleaved;
-pub(crate) use adpcm::ensure_adpcm_enabled;
+pub(crate) use adpcm::{adpcm_frames_capped, ensure_adpcm_enabled};
 pub(crate) use pcm::decode_collect;
 
 /// Max frames per pull block (~256 KiB of source PCM).
@@ -145,12 +147,12 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
     };
 
     let (frame_bytes, total_frames) = if header.fmt.codec.is_adpcm() {
-        let (ba, spb) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
-            (Some(p), _) => (p.block_align as u64, p.samples_per_block as u64),
-            (_, Some(p)) => (p.block_align as u64, p.samples_per_block as u64),
-            _ => (0, 0),
+        let (ba, ch, ima) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
+            (Some(p), _) => (u64::from(p.block_align), p.channels as u64, false),
+            (_, Some(p)) => (u64::from(p.block_align), p.channels as u64, true),
+            _ => (0, 1, false),
         };
-        let est = data_len.checked_div(ba).map(|n| n * spb).unwrap_or(0);
+        let est = adpcm::adpcm_frames_capped(data_len, ba, ch, ima, header.declared_sample_count);
         reject_too_many_frames(est, sample_rate, max_samples, max_secs)?;
         (0, est as usize)
     } else if header.fmt.codec == SampleCodec::G722 {
@@ -174,8 +176,9 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
         // a header that claims three hours of a 10 s file.
         let frames = match header.declared_sample_count {
             // `fact` / ds64 sampleCount is samples per channel, not interleaved.
-            Some(sc) => actual_frames.min(sc),
-            None => actual_frames,
+            // Zero is treated as unknown (same as ds64).
+            Some(sc) if sc > 0 => actual_frames.min(sc),
+            _ => actual_frames,
         };
         reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
         (frame_bytes, frames as usize)
@@ -317,8 +320,17 @@ where
     }
 }
 
-fn pcm_short(msg: &'static str) -> WavError {
-    WavError::packet_io(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, msg))
+fn pcm_short(_msg: &'static str) -> WavError {
+    WavError::format(FormatKind::Truncated)
+}
+
+/// Empty planar output (header-only / zero-length `data`).
+fn empty_planes(mode: ChannelMode, channels: usize) -> Vec<Vec<f32>> {
+    let n = match mode {
+        ChannelMode::Mono => 1,
+        ChannelMode::Split => channels.max(1),
+    };
+    vec![Vec::new(); n]
 }
 
 /// `f32` is `Copy` - dropping a partially-filled buffer is safe.

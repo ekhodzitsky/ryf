@@ -13,6 +13,37 @@ use crate::adpcm::{decode_ima_adpcm, decode_ms_adpcm};
 #[cfg(feature = "adpcm")]
 use crate::adpcm::{for_each_ima_adpcm_block, for_each_ms_adpcm_block};
 
+/// Frames implied by `block_align` (MS: 2 + 2*(ba/ch - 7), IMA: 1 + 2*(ba/ch - 4)).
+/// Matches the nibble walk; header `samplesPerBlock` is ignored (0 / lie).
+pub(crate) fn adpcm_est_frames(data_len: u64, ba: u64, ch: u64, ima: bool) -> u64 {
+    let ch = ch.max(1);
+    let spb = if ima {
+        ba.saturating_sub(4 * ch).saturating_mul(2) / ch + 1
+    } else {
+        ba.saturating_sub(7 * ch).saturating_mul(2) / ch + 2
+    }
+    .max(1);
+    data_len
+        .checked_div(ba)
+        .map(|n| n.saturating_mul(spb))
+        .unwrap_or(0)
+}
+
+/// Nibble estimate, then a smaller `fact` / ds64 count wins (same as PCM).
+pub(crate) fn adpcm_frames_capped(
+    data_len: u64,
+    ba: u64,
+    ch: u64,
+    ima: bool,
+    declared: Option<u64>,
+) -> u64 {
+    let est = adpcm_est_frames(data_len, ba, ch, ima);
+    match declared {
+        Some(sc) if sc > 0 => est.min(sc),
+        _ => est,
+    }
+}
+
 #[inline]
 pub(crate) fn ensure_adpcm_enabled() -> Result<()> {
     #[cfg(feature = "adpcm")]
@@ -79,6 +110,7 @@ fn visit_adpcm(
                 params,
                 plan.data_len,
                 plan.max_samples,
+                plan.total_frames,
                 plan.sample_rate,
                 plan.big_endian,
                 on_block,
@@ -95,6 +127,7 @@ fn visit_adpcm(
                 params,
                 plan.data_len,
                 plan.max_samples,
+                plan.total_frames,
                 plan.sample_rate,
                 plan.big_endian,
                 on_block,

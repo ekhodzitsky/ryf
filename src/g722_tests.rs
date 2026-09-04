@@ -77,6 +77,16 @@ fn headerless_rejects() {
     ));
 }
 
+#[test]
+fn empty_g722_wave_is_empty() -> crate::Result<()> {
+    let wav = wrap_g722(&[], 0x0064, 16_000, 1);
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.num_channels(), 1);
+    assert_eq!(d.frames(), 0);
+    assert!(matches!(crate::decode_f32(&wav), Err(WavError::Empty)));
+    Ok(())
+}
+
 fn wrap_g722_fmt16(raw: &[u8], tag: u16) -> Vec<u8> {
     let data_len = raw.len() as u32;
     let mut w = Vec::with_capacity(44 + raw.len());

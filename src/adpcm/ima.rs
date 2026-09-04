@@ -19,11 +19,13 @@ const IMA_STEP: [i16; 89] = [
 const IMA_INDEX: [i8; 16] = [-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8];
 
 /// Walk IMA/DVI ADPCM blocks; one compressed block of interleaved i16 at a time.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn for_each_ima_adpcm_block(
     mss: &mut ByteSource<'_>,
     params: &ImaAdpcmParams,
     data_len: u64,
     max_frames: usize,
+    target: usize,
     sample_rate: u32,
     big_endian: bool,
     mut on_block: impl FnMut(&[i16]) -> Result<()>,
@@ -42,7 +44,8 @@ pub(crate) fn for_each_ima_adpcm_block(
     let mut frames = 0usize;
 
     while remaining >= block as u64 {
-        mss.read_buf_exact(&mut block_buf).map_err(WavError::from)?;
+        mss.read_buf_exact(&mut block_buf)
+            .map_err(WavError::packet_io)?;
         remaining -= block as u64;
 
         let decoded = if ch == 1 {
@@ -50,14 +53,16 @@ pub(crate) fn for_each_ima_adpcm_block(
         } else {
             decode_ima_block_stereo(&block_buf, big_endian)?
         };
-        let frames_this = decoded.len() / ch;
-        if frames + frames_this > max_frames {
-            let observed_s = (frames + frames_this) as f64 / sample_rate.max(1) as f64;
-            let max_secs = max_frames as f64 / sample_rate.max(1) as f64;
-            return Err(WavError::too_long(observed_s, max_secs));
+        match super::take_block(&decoded, ch, frames, max_frames, target, sample_rate)? {
+            None => break,
+            Some((slice, done)) => {
+                on_block(slice)?;
+                frames += slice.len() / ch;
+                if done {
+                    break;
+                }
+            }
         }
-        on_block(&decoded)?;
-        frames += frames_this;
     }
 
     Ok(frames)
@@ -80,10 +85,19 @@ pub(crate) fn decode_ima_adpcm(
     let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
     out.try_reserve(hint)
         .map_err(|_| WavError::format(FormatKind::Adpcm))?;
-    for_each_ima_adpcm_block(mss, params, data_len, max_frames, 16_000, false, |block| {
-        out.extend_from_slice(block);
-        Ok(())
-    })?;
+    for_each_ima_adpcm_block(
+        mss,
+        params,
+        data_len,
+        max_frames,
+        usize::MAX,
+        16_000,
+        false,
+        |block| {
+            out.extend_from_slice(block);
+            Ok(())
+        },
+    )?;
     Ok(std::mem::take(&mut out))
 }
 
@@ -114,7 +128,7 @@ pub(crate) fn decode_ima_block_mono(block: &[u8], be: bool) -> Result<Vec<i16>> 
     if block.len() < 4 {
         return Err(WavError::format(FormatKind::Adpcm));
     }
-    let mut predictor = i32::from(super::i16_at(block, 0, be));
+    let mut predictor = i32::from(super::i16_at(block, 0, be)?);
     let mut step_index = i32::from(block[2]);
     if !(0..=88).contains(&step_index) {
         return Err(WavError::format(FormatKind::Adpcm));
@@ -144,8 +158,8 @@ pub(crate) fn decode_ima_block_stereo(block: &[u8], be: bool) -> Result<Vec<i16>
         return Err(WavError::format(FormatKind::Adpcm));
     }
     let mut pred = [
-        i32::from(super::i16_at(block, 0, be)),
-        i32::from(super::i16_at(block, 4, be)),
+        i32::from(super::i16_at(block, 0, be)?),
+        i32::from(super::i16_at(block, 4, be)?),
     ];
     let mut step_idx = [i32::from(block[2]), i32::from(block[6])];
     for &s in &step_idx {

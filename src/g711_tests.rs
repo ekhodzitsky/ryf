@@ -181,7 +181,9 @@ fn wave_streaming_mono_and_split() -> crate::Result<()> {
 fn encode_alaw_mulaw_roundtrip() -> crate::Result<()> {
     let samples = [0.0f32, 0.25, -0.5, 0.9];
     let alaw = crate::encode_alaw(&samples, 8_000, 1)?;
+    assert_eq!(&alaw[16..20], &18u32.to_le_bytes());
     assert_eq!(&alaw[20..22], &6u16.to_le_bytes());
+    assert!(alaw.windows(4).any(|w| w == b"fact"));
     let d = decode_bytes(&alaw, DecodeOptions::speech())?;
     assert_eq!(d.sample_rate, 8_000);
     assert_eq!(d.frames(), 4);
@@ -190,7 +192,9 @@ fn encode_alaw_mulaw_roundtrip() -> crate::Result<()> {
     }
 
     let mulaw = crate::encode_mulaw(&samples, 8_000, 1)?;
+    assert_eq!(&mulaw[16..20], &18u32.to_le_bytes());
     assert_eq!(&mulaw[20..22], &7u16.to_le_bytes());
+    assert!(mulaw.windows(4).any(|w| w == b"fact"));
     let d = decode_bytes(&mulaw, DecodeOptions::speech())?;
     assert_eq!(d.frames(), 4);
     for (got, src) in d.channels[0].iter().zip(samples.iter()) {

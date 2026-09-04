@@ -94,9 +94,14 @@ impl WavError {
     }
 
     /// Packet / short-read helper used by pull loops.
+    /// `UnexpectedEof` is a truncated WAVE body, not a transport failure.
     #[inline]
     pub(crate) fn packet_io(err: io::Error) -> Self {
-        Self::Io(err)
+        if err.kind() == io::ErrorKind::UnexpectedEof {
+            Self::format(FormatKind::Truncated)
+        } else {
+            Self::Io(err)
+        }
     }
 
     #[inline]

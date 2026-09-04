@@ -9,9 +9,9 @@ use std::path::Path;
 use super::header::{
     RF64_DATA_SIZE_POS, RF64_FACT_FRAMES_POS, RF64_RIFF_SIZE_POS, RF64_SAMPLE_COUNT_POS,
     data_len_pos, extensible_data_len_pos, extensible_fact_frames_pos, extensible_riff_prefix,
-    fact_frames_pos, frame_bytes, needs_rf64, push_extensible_header, push_header,
-    push_rf64_header, push_rifx_header, rf64_header_len, riff_prefix, swap_sample_bytes, u32_len,
-    validate_spec,
+    fact_frames_pos, frame_bytes, needs_rf64, padded_data_len, push_extensible_header, push_header,
+    push_rf64_header, push_rifx_header, rf64_header_len, riff_body_len, riff_prefix,
+    swap_sample_bytes, u32_len, validate_spec,
 };
 use super::{WriteFormat, WriteSpec};
 use crate::error::{FormatKind, Result, WavError};
@@ -31,6 +31,7 @@ pub struct WavWriter<W: Read + Write + Seek> {
     spec: WriteSpec,
     data_bytes: u64,
     finalized: bool,
+    odd_padded: bool,
     kind: WriterKind,
 }
 
@@ -69,6 +70,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
             spec,
             data_bytes: 0,
             finalized: false,
+            odd_padded: false,
             kind: WriterKind::Riff,
         })
     }
@@ -84,6 +86,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
             spec,
             data_bytes: 0,
             finalized: false,
+            odd_padded: false,
             kind: WriterKind::Rf64,
         })
     }
@@ -100,6 +103,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
             spec,
             data_bytes: 0,
             finalized: false,
+            odd_padded: false,
             kind: WriterKind::Rifx,
         })
     }
@@ -115,6 +119,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
             spec,
             data_bytes: 0,
             finalized: false,
+            odd_padded: false,
             kind: WriterKind::Extensible,
         })
     }
@@ -157,6 +162,10 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         if self.spec.format != WriteFormat::F32 {
             return Err(WavError::unsupported_codec(3));
         }
+        let ch = usize::from(self.spec.channels);
+        if ch == 0 || !samples.len().is_multiple_of(ch) {
+            return Err(WavError::OddPcm);
+        }
         let mut buf = Vec::with_capacity(samples.len().saturating_mul(4));
         for s in samples {
             buf.extend_from_slice(&s.to_le_bytes());
@@ -175,9 +184,18 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         if self.finalized {
             return Ok(());
         }
+        self.pad_odd_chunk()?;
         self.patch()?;
         self.inner.flush()?;
         self.finalized = true;
+        Ok(())
+    }
+
+    fn pad_odd_chunk(&mut self) -> Result<()> {
+        if self.data_bytes % 2 == 1 && !self.odd_padded {
+            self.inner.write_all(&[0])?;
+            self.odd_padded = true;
+        }
         Ok(())
     }
 
@@ -256,7 +274,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
     ) -> Result<()> {
         let data_len =
             u32_len(usize::try_from(self.data_bytes).map_err(|_| WavError::RiffTooLarge)?)?;
-        let riff_len = prefix.checked_add(data_len).ok_or(WavError::RiffTooLarge)?;
+        let riff_len = riff_body_len(prefix, data_len)?;
         let enc = |v: u32| if be { v.to_be_bytes() } else { v.to_le_bytes() };
         self.inner.seek(SeekFrom::Start(4))?;
         self.inner.write_all(&enc(riff_len))?;
@@ -277,7 +295,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         let fb = frame_bytes(self.spec)? as u64;
         let frames = data_len.checked_div(fb).unwrap_or(0);
         let riff_size = rf64_header_len(self.spec)
-            .saturating_add(data_len)
+            .saturating_add(padded_data_len(data_len))
             .saturating_sub(8);
         self.inner.seek(SeekFrom::Start(RF64_RIFF_SIZE_POS))?;
         self.inner.write_all(&riff_size.to_le_bytes())?;
@@ -285,7 +303,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         self.inner.write_all(&data_len.to_le_bytes())?;
         self.inner.seek(SeekFrom::Start(RF64_SAMPLE_COUNT_POS))?;
         self.inner.write_all(&frames.to_le_bytes())?;
-        if self.spec.format.is_float() {
+        if self.spec.format.has_fact() {
             let fact = frames.min(u64::from(u32::MAX)) as u32;
             self.inner.seek(SeekFrom::Start(RF64_FACT_FRAMES_POS))?;
             self.inner.write_all(&fact.to_le_bytes())?;
@@ -296,13 +314,15 @@ impl<W: Read + Write + Seek> WavWriter<W> {
 }
 
 fn overflow(prefix: u32, data_len: u64) -> bool {
-    u64::from(prefix).saturating_add(data_len) > u64::from(u32::MAX)
+    u64::from(prefix).saturating_add(padded_data_len(data_len)) > u64::from(u32::MAX)
 }
 
 impl<W: Read + Write + Seek> Drop for WavWriter<W> {
     fn drop(&mut self) {
         if !self.finalized {
+            let _ = self.pad_odd_chunk();
             let _ = self.patch();
+            let _ = self.inner.flush();
         }
     }
 }

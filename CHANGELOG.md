@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- MS-ADPCM adaptive delta is clamped to `16..=32767`. A large step times
+  adaptation 512/614/768 used to wrap through `i16` (e.g. 20000 * 512
+  became -25536).
+- ADPCM duration / RAM estimate uses the `block_align` nibble formula.
+  Header `samplesPerBlock` of 0 no longer estimates zero frames; a lying
+  high value no longer inflates the gate.
+- `ByteSource` memory seek `Start` / `Current` / `End` no longer go
+  through `i64` (offsets `>= 2^63` were reported as seek-before-start).
+  `ignore_bytes` / PCM skip use `advance` instead of `u64 as i64`. File
+  `read` retries `Interrupted`. `from_file` falls back to seek-end when
+  metadata fails.
+- Odd-length `data` chunks get a RIFF pad byte. Chunk size stays odd;
+  parent size includes the pad (`encode` / `WavWriter`). `WavWriter`
+  pads at most once if `finalize` fails and `Drop` retries.
+- `sniff_is_riff_wave` rewinds to 0 on I/O error (docs already said so).
+- ADPCM `fmt ` leftover after `cbSize` is skipped (padded IMA/MS chunks).
+- `fact` sample count 0 is unknown, same as ds64. Probe PCM frames is
+  `min(data/frame, fact)` so a lying `fact` matches decode.
+- Empty GSM / G.722 `data` keeps one empty plane. `decode_f32` is
+  `Empty`, not `InvalidOperation`.
+- `decode_s16` rejects `sample_rate` 0 (same as `decode_with`).
+- `convert_s16_le_to_f32` converts `min(dst.len(), src.len()/2)` and
+  does not panic when the slices disagree.
+- Header walk maps unexpected EOF to `Format(Truncated)`, not `Io`.
+- MS-ADPCM `fmt ` accepts fewer than 7 coefficient pairs (`cbSize >= 8`).
+- `WavWriter::Drop` flushes after patching sizes. `finalize` marks
+  done only after a successful flush.
+- `WavWriter::write_f32_samples` rejects a non-frame length before
+  allocating.
+- `probe` frame count uses the same `min(declared, file)` clamp as
+  decode. A truncated `data` chunk no longer over-reports duration.
+- Wave64: after a chunk GUID, a short size field is `Truncated`, not
+  `MissingChunk`.
+- `probe` / `probe_with` rewind the stream to 0 afterwards (same as
+  `sniff_is_riff_wave`), so a following `decode_with` on the same
+  source works.
+- G.711 encode writes WAVEFORMATEX (`fmt ` size 18, `cbSize` 0) and a
+  `fact` chunk, same layout as IEEE f32. Decode still accepts the older
+  PCM-style `fmt ` 16 files.
+- Pull short reads (`UnexpectedEof`) are `Format(Truncated)`, matching
+  `decode_s16`.
+- `ByteSource` file `seek` retries `Interrupted`. `from_file` rewinds
+  to 0 even when the `File` cursor was not at the start.
+- ADPCM decode / probe honor a smaller `fact` sample count (same as
+  PCM / G.722 / GSM). A lying-high `fact` is still ignored.
+- A 12-byte `RIFF....WAVE` (no chunks) is `MissingChunk`, not
+  `Truncated`. Header peek no longer requires 16 bytes (W64 GUID)
+  before the classic path.
+- PCM `fmt ` lengths other than 16 / 18 / 40 are accepted (surplus
+  skipped). ffmpeg already decoded `fmt ` 20 and Wave64-padded 24.
+
 ## [0.6.0] - 2026-09-04
 
 ### Added

@@ -61,6 +61,9 @@ fn test_probe_s16_mono() -> Result<()> {
     assert_eq!(info.sample_width, 2);
     assert_eq!(info.codec, crate::ProbeCodec::PcmS16);
     assert_eq!(info.declared_frames, Some(100));
+    assert_eq!(source.pos(), 0);
+    let decoded = crate::decode_with(&mut source, &crate::DecodeOptions::unbounded())?;
+    assert_eq!(decoded.frames(), 100);
     Ok(())
 }
 
@@ -315,6 +318,54 @@ fn test_rifx_s16_mono_decode() -> Result<()> {
         },
         "RIFX must sniff"
     );
+    let (rate, out) = own_mono_native(&file)?;
+    assert_eq!(rate, 16_000);
+    assert_eq!(out.len(), samples.len());
+    for (i, &s) in samples.iter().enumerate() {
+        let expect = s as f32 / 32_768.0;
+        assert!(
+            (out[i] - expect).abs() < 1e-6,
+            "sample {i}: got {} expect {expect}",
+            out[i]
+        );
+    }
+    Ok(())
+}
+
+/// RIFX WAVEFORMATEXTENSIBLE PCM: numeric `fmt ` fields are BE, GUID is raw bytes.
+#[test]
+fn test_rifx_extensible_s16_mono_decode() -> Result<()> {
+    let samples: [i16; 4] = [0, 1000, -1000, 2000];
+    let mut payload = Vec::new();
+    for &s in &samples {
+        payload.extend_from_slice(&s.to_be_bytes());
+    }
+    let mut fmt = Vec::new();
+    fmt.extend_from_slice(&0xFFFEu16.to_be_bytes());
+    fmt.extend_from_slice(&1u16.to_be_bytes());
+    fmt.extend_from_slice(&16_000u32.to_be_bytes());
+    fmt.extend_from_slice(&(16_000u32 * 2).to_be_bytes());
+    fmt.extend_from_slice(&2u16.to_be_bytes());
+    fmt.extend_from_slice(&16u16.to_be_bytes());
+    fmt.extend_from_slice(&22u16.to_be_bytes());
+    fmt.extend_from_slice(&16u16.to_be_bytes());
+    fmt.extend_from_slice(&1u32.to_be_bytes());
+    fmt.extend_from_slice(&crate::header::KSDATAFORMAT_SUBTYPE_PCM);
+
+    let mut body = Vec::new();
+    body.extend_from_slice(b"fmt ");
+    body.extend_from_slice(&(fmt.len() as u32).to_be_bytes());
+    body.extend_from_slice(&fmt);
+    body.extend_from_slice(b"data");
+    body.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+    body.extend_from_slice(&payload);
+
+    let mut file = Vec::new();
+    file.extend_from_slice(b"RIFX");
+    file.extend_from_slice(&(4 + body.len() as u32).to_be_bytes());
+    file.extend_from_slice(b"WAVE");
+    file.extend_from_slice(&body);
+
     let (rate, out) = own_mono_native(&file)?;
     assert_eq!(rate, 16_000);
     assert_eq!(out.len(), samples.len());

@@ -1,7 +1,5 @@
 //! Exact-size G.711 collect (LUT kernels).
 
-use std::io::Seek;
-
 use super::{check_duration, pcm_short, scratch_frames, uninit_f32_vec};
 use crate::convert::{convert_g711_mono, mix_g711, split_g711};
 use crate::error::{Result, WavError};
@@ -15,8 +13,6 @@ pub(super) fn fill_mono(
     sample_rate: u32,
     table: &'static [f32; 256],
 ) -> Result<()> {
-    use std::io::SeekFrom;
-
     let total = out.len();
     if total > max_samples {
         return check_duration(total, max_samples, sample_rate);
@@ -26,8 +22,7 @@ pub(super) fn fill_mono(
             return Err(pcm_short("wav: short g711 data"));
         }
         convert_g711_mono(&rest[..total], out, table);
-        mss.seek(SeekFrom::Current(total as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(total as u64).map_err(WavError::packet_io)?;
         return Ok(());
     }
     let block = scratch_frames(1, total);
@@ -57,8 +52,6 @@ pub(super) fn fill_mix(
     sample_rate: u32,
     table: &'static [f32; 256],
 ) -> Result<()> {
-    use std::io::SeekFrom;
-
     let total = out.len();
     if total > max_samples {
         return check_duration(total, max_samples, sample_rate);
@@ -69,8 +62,7 @@ pub(super) fn fill_mix(
             return Err(pcm_short("wav: short g711 mix data"));
         }
         mix_g711(&rest[..need], out, channels, table);
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(());
     }
     let block = scratch_frames(channels, total);
@@ -102,8 +94,6 @@ pub(super) fn fill_split(
     sample_rate: u32,
     table: &'static [f32; 256],
 ) -> Result<Vec<Vec<f32>>> {
-    use std::io::SeekFrom;
-
     if total_frames > max_samples {
         check_duration(total_frames, max_samples, sample_rate)?;
     }
@@ -119,8 +109,7 @@ pub(super) fn fill_split(
             let mut planes: Vec<&mut [f32]> = out.iter_mut().map(|c| c.as_mut_slice()).collect();
             split_g711(&rest[..need], &mut planes, table);
         }
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(out);
     }
     let block = scratch_frames(channels, total_frames);

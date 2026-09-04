@@ -16,6 +16,13 @@ fn convert_s16_le_to_f32_matches_div() {
         let expect = s as f32 / 32_768.0;
         assert!((dst[i] - expect).abs() < 1e-7, "i={i}");
     }
+
+    let mut long = vec![7.0f32; 4];
+    convert_s16_le_to_f32(&0i16.to_le_bytes(), &mut long);
+    assert_eq!(long[0], 0.0);
+    assert_eq!(long[1], 7.0);
+    convert_s16_le_to_f32(&[], &mut long);
+    assert_eq!(long[0], 0.0);
 }
 
 #[test]

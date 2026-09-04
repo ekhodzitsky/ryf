@@ -1,7 +1,5 @@
 //! G.722 pull / collect (stateful; 1 encoded byte is 2 PCM samples / ch).
 
-use std::io::Seek;
-
 use super::{
     DecodePlan, check_duration, emit_mono_block, emit_split_block, pcm_short, scratch_frames,
 };
@@ -12,15 +10,13 @@ use crate::scrub::scrub_vec;
 use crate::source::ByteSource;
 
 pub(super) fn collect_g722(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Result<Vec<Vec<f32>>> {
-    use std::io::SeekFrom;
-
     let total = plan.total_frames;
     if total > plan.max_samples {
         check_duration(total, plan.max_samples, plan.sample_rate)?;
     }
     let channels = plan.channels;
     if total == 0 || channels == 0 {
-        return Ok(Vec::new());
+        return Ok(super::empty_planes(plan.mode, channels));
     }
     let need = total.div_ceil(2).saturating_mul(channels);
     let mut planes = if let Some(rest) = mss.remaining_slice() {
@@ -38,8 +34,7 @@ pub(super) fn collect_g722(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Resul
         p.truncate(total);
     }
     if mss.remaining_slice().is_some() {
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
     }
     Ok(planes)
 }
@@ -52,8 +47,6 @@ pub(super) fn pull_g722<F>(
 where
     F: FnMut(super::StreamBlock<'_>) -> Result<()>,
 {
-    use std::io::SeekFrom;
-
     let channels = plan.channels;
     let total_pcm = plan.total_frames;
     if total_pcm > plan.max_samples {
@@ -80,8 +73,7 @@ where
             &mut decs,
             on_block,
         )?;
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(n);
     }
 

@@ -26,7 +26,10 @@ fn encode_rifx_f32_s24_alaw_roundtrips() -> Result<()> {
     assert_eq!(mono, le_mono);
 
     let alaw = crate::encode_alaw(&[0.25, -0.5], 8_000, 1)?;
-    let rwav = encode_rifx(WriteSpec::alaw(8_000, 1), &alaw[44..])?;
+    assert_eq!(&alaw[16..20], &18u32.to_le_bytes());
+    assert!(alaw.windows(4).any(|w| w == b"fact"));
+    let packed = crate::convert::g711::s16le_to_g711(&f32_to_s16le(&[0.25, -0.5]), true)?;
+    let rwav = encode_rifx(WriteSpec::alaw(8_000, 1), &packed)?;
     assert_eq!(&rwav[..4], b"RIFX");
     let d = decode_bytes(&rwav, DecodeOptions::unbounded())?;
     let dle = decode_bytes(&alaw, DecodeOptions::unbounded())?;
@@ -86,5 +89,102 @@ fn wav_writer_rifx_and_extensible_match_encode() -> Result<()> {
         w.finalize()?;
     }
     assert_eq!(cur.into_inner(), encode_extensible(spec, &pcm)?);
+    Ok(())
+}
+
+#[test]
+fn wav_writer_alaw_matches_encode() -> Result<()> {
+    use std::io::Cursor;
+
+    let packed = crate::convert::g711::s16le_to_g711(&f32_to_s16le(&[0.25, -0.5]), true)?;
+    let spec = WriteSpec::alaw(8_000, 1);
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new(&mut cur, spec)?;
+        w.write_pcm(&packed)?;
+        w.finalize()?;
+    }
+    assert_eq!(cur.into_inner(), crate::encode(spec, &packed)?);
+    Ok(())
+}
+
+#[test]
+fn write_f32_samples_rejects_odd_channels() -> Result<()> {
+    use std::io::Cursor;
+    let mut cur = Cursor::new(Vec::new());
+    let mut w = WavWriter::new(&mut cur, WriteSpec::f32(16_000, 2))?;
+    assert!(matches!(w.write_f32_samples(&[0.1]), Err(WavError::OddPcm)));
+    w.write_f32_samples(&[0.1, -0.2])?;
+    w.finalize()?;
+    Ok(())
+}
+
+#[test]
+fn encode_odd_u8_writes_riff_pad() -> Result<()> {
+    let pcm = [0u8, 128, 255];
+    let wav = crate::encode(WriteSpec::u8(8_000, 1), &pcm)?;
+    assert_eq!(wav.len() % 2, 0);
+    assert_eq!(wav[wav.len() - 1], 0);
+    assert_eq!(&wav[40..44], &3u32.to_le_bytes());
+    let (_, mono) = crate::decode_f32(&wav)?;
+    assert_eq!(mono.len(), 3);
+
+    let mut cur = std::io::Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new(&mut cur, WriteSpec::u8(8_000, 1))?;
+        w.write_pcm(&pcm)?;
+        w.finalize()?;
+    }
+    let streamed = cur.into_inner();
+    assert_eq!(streamed, wav);
+    Ok(())
+}
+
+#[test]
+fn sniff_rewinds_after_io_error() -> Result<()> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    struct PartialBoom {
+        remain: u8,
+        pos: u64,
+    }
+    impl Read for PartialBoom {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.remain == 0 {
+                return Err(std::io::Error::other("boom"));
+            }
+            self.remain -= 1;
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            buf[0] = b'R';
+            self.pos += 1;
+            Ok(1)
+        }
+    }
+    impl Seek for PartialBoom {
+        fn seek(&mut self, from: SeekFrom) -> std::io::Result<u64> {
+            self.pos = match from {
+                SeekFrom::Start(p) => p,
+                SeekFrom::Current(d) => {
+                    let s = i64::try_from(self.pos)
+                        .unwrap_or(i64::MAX)
+                        .saturating_add(d);
+                    if s < 0 {
+                        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "neg"));
+                    }
+                    s as u64
+                }
+                SeekFrom::End(_) => 0,
+            };
+            Ok(self.pos)
+        }
+    }
+    let mut src = crate::ByteSource::from_read_seek(PartialBoom { remain: 1, pos: 0 }, Some(40));
+    assert!(matches!(
+        crate::sniff_is_riff_wave(&mut src),
+        Err(WavError::Io(_))
+    ));
+    assert_eq!(src.pos(), 0);
     Ok(())
 }

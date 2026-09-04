@@ -25,7 +25,10 @@ use scalar::{
 use simd::*;
 
 pub fn convert_s16_le_to_f32(src: &[u8], dst: &mut [f32]) {
-    convert_s16_mono(src, dst);
+    let n = dst.len().min(src.len() / 2);
+    if n > 0 {
+        convert_s16_mono(&src[..n * 2], &mut dst[..n]);
+    }
 }
 
 #[inline]

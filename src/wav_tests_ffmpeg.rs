@@ -378,8 +378,8 @@ fn test_diff_fact_chunk() -> Result<()> {
 }
 
 #[test]
-fn test_diff_pcm_fmt_len_18_and_40() -> Result<()> {
-    for pcm_fmt_len in [18u32, 40] {
+fn test_diff_pcm_fmt_len_18_20_and_40() -> Result<()> {
+    for pcm_fmt_len in [18u32, 20, 40] {
         let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(13), 300, 1);
         let wav = WavBuilder {
             pcm_fmt_len,

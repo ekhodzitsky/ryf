@@ -221,6 +221,23 @@ fn clamp_i16_edges() {
     assert_eq!(clamp_i16(12), 12);
 }
 
+#[test]
+fn ms_adpcm_delta_clamps_instead_of_wrapping() {
+    // nibble 0 adapt 230: 16*230>>8 = 14 -> min 16.
+    assert_eq!(adapt_ms_delta(16, 0), 16);
+    // nibble 6 adapt 512: 20000*512>>8 = 40000, must not become -25536.
+    assert_eq!(adapt_ms_delta(20_000, 6), i16::MAX);
+    assert_eq!(adapt_ms_delta(16_384, 6), i16::MAX);
+}
+
+#[test]
+fn i16_at_rejects_short_block() -> Result<()> {
+    assert!(i16_at(&[0u8], 0, false).is_err());
+    assert_eq!(i16_at(&[0x34, 0x12], 0, false)?, 0x1234);
+    assert_eq!(i16_at(&[0x12, 0x34], 0, true)?, 0x1234);
+    Ok(())
+}
+
 fn put_i16(buf: &mut [u8], off: usize, v: i16, be: bool) {
     let b = if be { v.to_be_bytes() } else { v.to_le_bytes() };
     buf[off] = b[0];
@@ -228,11 +245,16 @@ fn put_i16(buf: &mut [u8], off: usize, v: i16, be: bool) {
 }
 
 fn wrap_wave(be: bool, fmt: &[u8], payload: &[u8]) -> Vec<u8> {
+    wrap_with_fact(be, fmt, payload, None)
+}
+
+fn wrap_with_fact(be: bool, fmt: &[u8], payload: &[u8], fact: Option<u32>) -> Vec<u8> {
     let u32b = |v: u32| if be { v.to_be_bytes() } else { v.to_le_bytes() };
     let fmt_len = fmt.len() as u32;
     let data_len = payload.len() as u32;
     let pad = data_len % 2;
-    let riff_len = 4 + 8 + fmt_len + 8 + data_len + pad;
+    let fact_bytes = if fact.is_some() { 12 } else { 0 };
+    let riff_len = 4 + 8 + fmt_len + fact_bytes + 8 + data_len + pad;
     let mut w = Vec::new();
     w.extend_from_slice(if be { b"RIFX" } else { b"RIFF" });
     w.extend_from_slice(&u32b(riff_len));
@@ -240,6 +262,11 @@ fn wrap_wave(be: bool, fmt: &[u8], payload: &[u8]) -> Vec<u8> {
     w.extend_from_slice(b"fmt ");
     w.extend_from_slice(&u32b(fmt_len));
     w.extend_from_slice(fmt);
+    if let Some(n) = fact {
+        w.extend_from_slice(b"fact");
+        w.extend_from_slice(&u32b(4));
+        w.extend_from_slice(&u32b(n));
+    }
     w.extend_from_slice(b"data");
     w.extend_from_slice(&u32b(data_len));
     w.extend_from_slice(payload);
@@ -329,5 +356,37 @@ fn rifx_adpcm_headers_match_le() -> Result<()> {
     let dle = decode_bytes(&le_wav, DecodeOptions::unbounded())?;
     let dbe = decode_bytes(&be_wav, DecodeOptions::unbounded())?;
     assert_eq!(dle.channels[0], dbe.channels[0]);
+    Ok(())
+}
+
+#[test]
+fn ima_zero_samples_per_block_still_decodes() -> Result<()> {
+    let mut block = vec![0u8; 36];
+    put_i16(&mut block, 0, 0x0100, false);
+    block[2] = 4;
+    for b in &mut block[4..] {
+        *b = 0x11;
+    }
+    let mut fmt = ima_fmt(false);
+    fmt[18..20].copy_from_slice(&0u16.to_le_bytes());
+    let wav = wrap_wave(false, &fmt, &block);
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert!(d.frames() > 1);
+    Ok(())
+}
+
+#[test]
+fn fact_smaller_than_block_truncates() -> Result<()> {
+    let mut block = vec![0u8; 36];
+    put_i16(&mut block, 0, 0x0100, false);
+    block[2] = 4;
+    for b in &mut block[4..] {
+        *b = 0x11;
+    }
+    let wav = wrap_with_fact(false, &ima_fmt(false), &block, Some(4));
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 4);
+    let p = crate::probe(&mut ByteSource::from_slice(&wav))?;
+    assert_eq!(p.declared_frames, Some(4));
     Ok(())
 }

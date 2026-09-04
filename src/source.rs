@@ -87,12 +87,21 @@ impl<'a> ByteSource<'a> {
         }
     }
 
-    /// Local file, streamed.
+    /// Local file, streamed. The cursor is rewound to 0.
     pub fn from_file(file: std::fs::File) -> ByteSource<'static> {
-        let len = file.metadata().ok().map(|m| m.len());
+        let mut file = file;
+        let len = file
+            .metadata()
+            .ok()
+            .map(|m| m.len())
+            .or_else(|| file.seek(SeekFrom::End(0)).ok());
+        let pos = match file.seek(SeekFrom::Start(0)) {
+            Ok(p) => p,
+            Err(_) => file.stream_position().unwrap_or(0),
+        };
         ByteSource {
             inner: Box::new(file),
-            pos: 0,
+            pos,
             byte_len: len,
             memory: Contiguous::None,
         }
@@ -131,7 +140,7 @@ impl<'a> ByteSource<'a> {
     #[inline]
     pub fn remaining_slice(&self) -> Option<&[u8]> {
         let data = self.memory.as_slice()?;
-        let pos = self.pos as usize;
+        let pos = usize::try_from(self.pos).unwrap_or(usize::MAX);
         if pos >= data.len() {
             return Some(&[]);
         }
@@ -178,6 +187,12 @@ impl<'a> ByteSource<'a> {
         Ok(u32::from_be_bytes(buf))
     }
 
+    /// Move the cursor forward by `n` bytes without going through `i64`.
+    pub fn advance(&mut self, n: u64) -> io::Result<()> {
+        let pos = self.pos.saturating_add(n);
+        self.seek(SeekFrom::Start(pos)).map(|_| ())
+    }
+
     /// Skip `count` bytes (seek when large; else read-discard).
     pub fn ignore_bytes(&mut self, count: u64) -> io::Result<()> {
         if count == 0 {
@@ -195,7 +210,7 @@ impl<'a> ByteSource<'a> {
                     ));
                 }
             }
-            if self.seek(SeekFrom::Current(count as i64)).is_ok() {
+            if self.advance(count).is_ok() {
                 return Ok(());
             }
         }
@@ -217,10 +232,19 @@ impl<'a> ByteSource<'a> {
     }
 }
 
+fn add_signed(base: u64, delta: i64) -> io::Result<u64> {
+    if delta >= 0 {
+        Ok(base.saturating_add(delta as u64))
+    } else {
+        base.checked_sub(delta.unsigned_abs())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "seek before start"))
+    }
+}
+
 impl Read for ByteSource<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if let Some(data) = self.memory.as_slice() {
-            let pos = self.pos as usize;
+            let pos = usize::try_from(self.pos).unwrap_or(usize::MAX);
             if pos >= data.len() {
                 return Ok(0);
             }
@@ -229,9 +253,16 @@ impl Read for ByteSource<'_> {
             self.pos += n as u64;
             return Ok(n);
         }
-        let n = self.inner.read(buf)?;
-        self.pos += n as u64;
-        Ok(n)
+        loop {
+            match self.inner.read(buf) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+                Ok(n) => {
+                    self.pos += n as u64;
+                    return Ok(n);
+                }
+            }
+        }
     }
 }
 
@@ -240,22 +271,23 @@ impl Seek for ByteSource<'_> {
         if let Some(data) = self.memory.as_slice() {
             let len = data.len() as u64;
             let next = match pos {
-                SeekFrom::Start(p) => p as i64,
-                SeekFrom::End(p) => len as i64 + p,
-                SeekFrom::Current(p) => self.pos as i64 + p,
+                SeekFrom::Start(p) => p,
+                SeekFrom::End(p) => add_signed(len, p)?,
+                SeekFrom::Current(p) => add_signed(self.pos, p)?,
             };
-            if next < 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "seek before start",
-                ));
-            }
-            self.pos = next as u64;
+            self.pos = next;
             return Ok(self.pos);
         }
-        let p = self.inner.seek(pos)?;
-        self.pos = p;
-        Ok(p)
+        loop {
+            match self.inner.seek(pos) {
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+                Ok(p) => {
+                    self.pos = p;
+                    return Ok(p);
+                }
+            }
+        }
     }
 }
 

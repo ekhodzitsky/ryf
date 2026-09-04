@@ -13,8 +13,8 @@ mod header;
 mod writer;
 
 use header::{
-    extensible_riff_prefix, frame_bytes, needs_rf64, push_extensible_header, push_header,
-    push_rf64_header, push_rifx_header, swap_sample_bytes, u32_len, validate_spec,
+    extensible_riff_prefix, frame_bytes, needs_rf64, padded_data_len, push_extensible_header,
+    push_header, push_rf64_header, push_rifx_header, swap_sample_bytes, u32_len, validate_spec,
 };
 pub use writer::WavWriter;
 
@@ -63,6 +63,12 @@ impl WriteFormat {
     #[must_use]
     pub fn is_float(self) -> bool {
         matches!(self, Self::F32)
+    }
+
+    /// IEEE f32 and G.711 write `fmt ` size 18 plus a `fact` chunk.
+    #[must_use]
+    pub(crate) fn has_fact(self) -> bool {
+        matches!(self, Self::F32 | Self::ALaw | Self::MuLaw)
     }
 
     /// WAVE `wFormatTag` (extensible uses `0xFFFE` instead).
@@ -151,16 +157,33 @@ impl WriteSpec {
     }
 }
 
-/// Encode interleaved PCM bytes as WAVE.
-///
-/// Classic RIFF when the sizes fit in `u32`; RF64 otherwise. `pcm` length
-/// must be a whole number of frames. Empty `pcm` is a valid header-only WAVE.
-pub fn encode(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
+fn prepared(spec: WriteSpec, pcm: &[u8]) -> Result<usize> {
     validate_spec(spec)?;
     let fb = frame_bytes(spec)?;
     if !pcm.len().is_multiple_of(fb) {
         return Err(WavError::OddPcm);
     }
+    Ok(fb)
+}
+
+fn write_all(path: &Path, bytes: &[u8]) -> Result<()> {
+    File::create(path)?.write_all(bytes)?;
+    Ok(())
+}
+
+fn append_payload(out: &mut Vec<u8>, pcm: &[u8]) {
+    out.extend_from_slice(pcm);
+    if pcm.len() % 2 == 1 {
+        out.push(0);
+    }
+}
+
+/// Encode interleaved PCM bytes as WAVE.
+///
+/// Classic RIFF when the sizes fit in `u32`; RF64 otherwise. `pcm` length
+/// must be a whole number of frames. Empty `pcm` is a valid header-only WAVE.
+pub fn encode(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
+    let _fb = prepared(spec, pcm)?;
     let data_len = pcm.len() as u64;
     if needs_rf64(spec, data_len) {
         return encode_rf64(spec, pcm);
@@ -168,39 +191,29 @@ pub fn encode(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
     let data_len = u32_len(pcm.len())?;
     let mut out = Vec::with_capacity(58usize.saturating_add(pcm.len()));
     push_header(&mut out, spec, data_len)?;
-    out.extend_from_slice(pcm);
+    append_payload(&mut out, pcm);
     Ok(out)
 }
 
 /// Encode interleaved PCM as RF64 even when the file would fit in RIFF.
 pub fn encode_rf64(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
-    validate_spec(spec)?;
-    let fb = frame_bytes(spec)?;
-    if !pcm.len().is_multiple_of(fb) {
-        return Err(WavError::OddPcm);
-    }
+    let fb = prepared(spec, pcm)?;
     let data_len = pcm.len() as u64;
     let frames = data_len / fb as u64;
     let mut out = Vec::with_capacity(94usize.saturating_add(pcm.len()));
     push_rf64_header(&mut out, spec, data_len, frames)?;
-    out.extend_from_slice(pcm);
+    append_payload(&mut out, pcm);
     Ok(out)
 }
 
 /// Write [`encode_rf64`] output to `path`.
 pub fn write_rf64(path: &Path, spec: WriteSpec, pcm: &[u8]) -> Result<()> {
-    let bytes = encode_rf64(spec, pcm)?;
-    let mut f = File::create(path)?;
-    f.write_all(&bytes)?;
-    Ok(())
+    write_all(path, &encode_rf64(spec, pcm)?)
 }
 
 /// Write [`encode`] output to `path`.
 pub fn write(path: &Path, spec: WriteSpec, pcm: &[u8]) -> Result<()> {
-    let bytes = encode(spec, pcm)?;
-    let mut f = File::create(path)?;
-    f.write_all(&bytes)?;
-    Ok(())
+    write_all(path, &encode(spec, pcm)?)
 }
 
 /// Write a mono PCM16 WAVE file.
@@ -210,10 +223,7 @@ pub fn write_s16(path: &Path, pcm: &[u8], sample_rate: u32) -> Result<()> {
 
 /// Write interleaved IEEE f32 WAVE (1-26 channels).
 pub fn write_f32(path: &Path, samples: &[f32], sample_rate: u32, channels: u16) -> Result<()> {
-    let bytes = encode_f32(samples, sample_rate, channels)?;
-    let mut f = File::create(path)?;
-    f.write_all(&bytes)?;
-    Ok(())
+    write_all(path, &encode_f32(samples, sample_rate, channels)?)
 }
 
 /// Encode mono PCM16. `pcm` is little-endian i16; length must be even.
@@ -275,11 +285,7 @@ fn encode_g711(samples: &[f32], sample_rate: u32, channels: u16, alaw: bool) -> 
 
 /// Encode as RIFX (big-endian). `pcm` is the same little-endian payload as [`encode`].
 pub fn encode_rifx(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
-    validate_spec(spec)?;
-    let fb = frame_bytes(spec)?;
-    if !pcm.len().is_multiple_of(fb) {
-        return Err(WavError::OddPcm);
-    }
+    let _fb = prepared(spec, pcm)?;
     if needs_rf64(spec, pcm.len() as u64) {
         return Err(WavError::RiffTooLarge);
     }
@@ -287,18 +293,14 @@ pub fn encode_rifx(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
     let payload = swap_sample_bytes(pcm, spec.format.bytes_per_sample());
     let mut out = Vec::with_capacity(58usize.saturating_add(payload.len()));
     push_rifx_header(&mut out, spec, data_len)?;
-    out.extend_from_slice(&payload);
+    append_payload(&mut out, &payload);
     Ok(out)
 }
 
 /// Encode with `WAVEFORMATEXTENSIBLE` (`fmt ` size 40).
 pub fn encode_extensible(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
-    validate_spec(spec)?;
-    let fb = frame_bytes(spec)?;
-    if !pcm.len().is_multiple_of(fb) {
-        return Err(WavError::OddPcm);
-    }
-    if u64::from(extensible_riff_prefix(spec)).saturating_add(pcm.len() as u64)
+    let _fb = prepared(spec, pcm)?;
+    if u64::from(extensible_riff_prefix(spec)).saturating_add(padded_data_len(pcm.len() as u64))
         > u64::from(u32::MAX)
     {
         return Err(WavError::RiffTooLarge);
@@ -306,7 +308,7 @@ pub fn encode_extensible(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
     let data_len = u32_len(pcm.len())?;
     let mut out = Vec::with_capacity(80usize.saturating_add(pcm.len()));
     push_extensible_header(&mut out, spec, data_len)?;
-    out.extend_from_slice(pcm);
+    append_payload(&mut out, pcm);
     Ok(out)
 }
 

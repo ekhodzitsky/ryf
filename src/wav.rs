@@ -9,7 +9,7 @@ use crate::ChannelMode;
 use crate::error::{FormatKind, Result, WavError};
 use crate::header::{self, SampleCodec, parse_header};
 use crate::options::DecodeOptions;
-use crate::pull::{decode_collect, ensure_adpcm_enabled, open_decode};
+use crate::pull::{adpcm_frames_capped, decode_collect, ensure_adpcm_enabled, open_decode};
 use crate::source::ByteSource;
 
 pub use crate::convert::convert_s16_le_to_f32;
@@ -61,8 +61,21 @@ pub struct WavProbe {
 
 /// Read the stream head and report whether it marks a WAVE container:
 /// `RIFF` / `RIFX` / `RF64` / `BW64` + `"WAVE"`, or Sony Wave64 (GUID riff/wave).
-/// The stream is always rewound to position 0 afterwards.
+/// The stream is always rewound to position 0 afterwards, including on I/O
+/// error (rewind failure is returned only when the prefix read succeeded).
 pub fn sniff_is_riff_wave(mss: &mut ByteSource<'_>) -> Result<bool> {
+    let result = sniff_wave_prefix(mss);
+    let rewind = mss.seek(SeekFrom::Start(0));
+    match result {
+        Ok(v) => rewind.map(|_| v).map_err(WavError::Io),
+        Err(e) => {
+            let _ = rewind;
+            Err(e)
+        }
+    }
+}
+
+fn sniff_wave_prefix(mss: &mut ByteSource<'_>) -> Result<bool> {
     // 40 bytes covers W64 (16 GUID + 8 size + 16 WAVE GUID).
     let mut prefix = [0u8; 40];
     let mut filled = 0usize;
@@ -80,8 +93,6 @@ pub fn sniff_is_riff_wave(mss: &mut ByteSource<'_>) -> Result<bool> {
     let is_w64 = filled >= 40
         && prefix[0..16] == header::W64_GUID_RIFF
         && prefix[24..40] == header::W64_GUID_WAVE;
-
-    mss.seek(SeekFrom::Start(0))?;
     Ok(is_classic || is_w64)
 }
 
@@ -98,7 +109,21 @@ pub fn probe(mss: &mut ByteSource<'_>) -> Result<WavProbe> {
 }
 
 /// Probe a RIFF/WAVE stream (positioned at offset 0) without decoding PCM.
+/// The stream is always rewound to position 0 afterwards, including on error
+/// (rewind failure is returned only when the probe itself succeeded).
 pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProbe> {
+    let result = probe_inner(mss, opts);
+    let rewind = mss.seek(SeekFrom::Start(0));
+    match result {
+        Ok(v) => rewind.map(|_| v).map_err(WavError::Io),
+        Err(e) => {
+            let _ = rewind;
+            Err(e)
+        }
+    }
+}
+
+fn probe_inner(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProbe> {
     let header = parse_header(mss)?;
     let header_rate = header.fmt.sample_rate;
     if header_rate == 0 || header_rate > opts.max_sample_rate {
@@ -114,8 +139,19 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
     if header.fmt.codec.is_adpcm() {
         ensure_adpcm_enabled()?;
     }
+    // Same clamp as `open_decode`: lying `data` size cannot exceed the file.
+    let data_len = match header.declared_data_len {
+        Some(d) => Some(
+            d.min(
+                mss.byte_len()
+                    .map(|n| n.saturating_sub(header.data_pos))
+                    .unwrap_or(d),
+            ),
+        ),
+        None => mss.byte_len().map(|n| n.saturating_sub(header.data_pos)),
+    };
     let declared_frames = if header.fmt.codec == SampleCodec::G722 {
-        match header.declared_data_len {
+        match data_len {
             Some(d) => Some(crate::g722::pcm_frames_capped(
                 d,
                 header.fmt.channels,
@@ -124,24 +160,20 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
             None => header.declared_sample_count,
         }
     } else if header.fmt.codec == SampleCodec::Gsm {
-        match header.declared_data_len {
+        match data_len {
             Some(d) => Some(crate::gsm::pcm_frames_capped(
                 d,
                 header.declared_sample_count,
             )),
             None => header.declared_sample_count,
         }
-    } else if let Some(sc) = header.declared_sample_count {
-        Some(sc)
     } else if header.fmt.codec.is_adpcm() {
-        let (ba, spb) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
-            (Some(p), _) => (p.block_align as u64, p.samples_per_block as u64),
-            (_, Some(p)) => (p.block_align as u64, p.samples_per_block as u64),
-            _ => (0, 0),
+        let (ba, ch, ima) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
+            (Some(p), _) => (u64::from(p.block_align), p.channels as u64, false),
+            (_, Some(p)) => (u64::from(p.block_align), p.channels as u64, true),
+            _ => (0, 1, false),
         };
-        header
-            .declared_data_len
-            .and_then(|d| d.checked_div(ba).map(|blocks| blocks * spb))
+        data_len.map(|d| adpcm_frames_capped(d, ba, ch, ima, header.declared_sample_count))
     } else {
         let frame_bytes = header
             .fmt
@@ -149,7 +181,13 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
             .checked_mul(header.fmt.channels)
             .filter(|&n| n > 0)
             .ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
-        header.declared_data_len.map(|d| d / frame_bytes as u64)
+        data_len.map(|d| {
+            let actual = d / frame_bytes as u64;
+            match header.declared_sample_count {
+                Some(sc) if sc > 0 => actual.min(sc),
+                _ => actual,
+            }
+        })
     };
     Ok(WavProbe {
         sample_rate,
@@ -215,6 +253,9 @@ fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
         || header.fmt.sample_width != 2
     {
         return Err(WavError::unsupported_codec(header.fmt.format_tag));
+    }
+    if header.fmt.sample_rate == 0 {
+        return Err(WavError::sample_rate(0, 1));
     }
     let available = src
         .byte_len()

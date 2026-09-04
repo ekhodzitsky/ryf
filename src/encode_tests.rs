@@ -175,6 +175,13 @@ fn decode_s16_roundtrip_and_rejects() -> Result<()> {
     let mut odd = wav;
     odd[40..44].copy_from_slice(&1u32.to_le_bytes());
     assert!(matches!(crate::decode_s16(&odd), Err(WavError::OddPcm)));
+
+    let mut zrate = encode_s16(&pcm, 16_000)?;
+    zrate[24..28].copy_from_slice(&0u32.to_le_bytes());
+    assert!(matches!(
+        crate::decode_s16(&zrate),
+        Err(WavError::UnsupportedSampleRate { rate: 0, .. })
+    ));
     Ok(())
 }
 

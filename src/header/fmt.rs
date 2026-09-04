@@ -1,6 +1,6 @@
 //! `fmt ` chunk body (PCM / IEEE / G.711 / G.722 / GSM / ADPCM / EXTENSIBLE).
 
-use super::riff::{read_u16_endian, read_u32_endian};
+use super::riff::{eof_trunc, read_u16_endian, read_u32_endian};
 use super::{
     FmtFields, KSDATAFORMAT_SUBTYPE_ALAW, KSDATAFORMAT_SUBTYPE_AMBISONIC_IEEE_FLOAT,
     KSDATAFORMAT_SUBTYPE_AMBISONIC_PCM, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
@@ -20,20 +20,26 @@ use crate::adpcm::{ImaAdpcmParams, MsAdpcmParams};
 #[cfg(not(feature = "adpcm"))]
 use super::adpcm_types::{ImaAdpcmParams, MsAdpcmParams};
 
+/// Skip `fmt ` bytes after the 16-byte core plus `extra_size` extra.
+fn skip_fmt_tail(mss: &mut ByteSource<'_>, rem: u32, extra_size: u32) -> Result<()> {
+    if rem > extra_size {
+        mss.ignore_bytes(u64::from(rem - extra_size))
+            .map_err(eof_trunc)?;
+    }
+    Ok(())
+}
+
 /// Skip `cbSize` plus extra bytes after the 16-byte `fmt ` core.
 fn skip_fmt_extra(mss: &mut ByteSource<'_>, chunk_len: u32, big_endian: bool) -> Result<()> {
     if chunk_len >= 18 {
-        let extra_size = read_u16_endian(mss, big_endian)?;
+        let _cb = read_u16_endian(mss, big_endian)?;
         let rem = chunk_len.saturating_sub(18);
-        let skip = u64::from(extra_size).min(u64::from(rem));
-        if skip > 0 {
-            mss.ignore_bytes(skip)?;
-        }
-        if rem > u32::from(extra_size) {
-            mss.ignore_bytes(u64::from(rem - u32::from(extra_size)))?;
+        if rem > 0 {
+            mss.ignore_bytes(u64::from(rem)).map_err(eof_trunc)?;
         }
     } else if chunk_len > 16 {
-        mss.ignore_bytes(u64::from(chunk_len - 16))?;
+        mss.ignore_bytes(u64::from(chunk_len - 16))
+            .map_err(eof_trunc)?;
     }
     Ok(())
 }
@@ -56,17 +62,8 @@ pub(super) fn parse_fmt_chunk(
 
     match format {
         WAVE_FORMAT_PCM => {
-            // Canonical lengths (same as historical path); 40 is a common wild size.
-            match chunk_len {
-                16 => {}
-                18 => {
-                    let _cb = read_u16_endian(mss, big_endian)?;
-                }
-                40 => {
-                    mss.ignore_bytes(24)?;
-                }
-                _ => return Err(WavError::format(FormatKind::MalformedFmt)),
-            }
+            // Canonical 16 / 18 / 40; skip surplus (wild 20, Wave64 8-byte pad).
+            skip_fmt_extra(mss, chunk_len, big_endian)?;
 
             let width = container_width(block_align, num_channels, bits_per_sample)?;
             let (codec, width) = pcm_codec_for(bits_per_sample, width)?;
@@ -78,7 +75,7 @@ pub(super) fn parse_fmt_chunk(
                 sample_width: width,
                 adpcm_ms: None,
                 adpcm_ima: None,
-                big_endian: false,
+                big_endian,
                 format_tag: format,
             })
         }
@@ -92,10 +89,10 @@ pub(super) fn parse_fmt_chunk(
                     }
                 }
                 40 => {
-                    mss.ignore_bytes(24)?;
+                    mss.ignore_bytes(24).map_err(eof_trunc)?;
                 }
                 n if n > 18 => {
-                    mss.ignore_bytes(u64::from(n - 16))?;
+                    mss.ignore_bytes(u64::from(n - 16)).map_err(eof_trunc)?;
                 }
                 _ => return Err(WavError::format(FormatKind::MalformedFmt)),
             }
@@ -119,7 +116,7 @@ pub(super) fn parse_fmt_chunk(
                 sample_width: width,
                 adpcm_ms: None,
                 adpcm_ima: None,
-                big_endian: false,
+                big_endian,
                 format_tag: format,
             })
         }
@@ -143,7 +140,7 @@ pub(super) fn parse_fmt_chunk(
                 sample_width: 1,
                 adpcm_ms: None,
                 adpcm_ima: None,
-                big_endian: false,
+                big_endian,
                 format_tag: format,
             })
         }
@@ -168,7 +165,7 @@ pub(super) fn parse_fmt_chunk(
                 sample_width: MS_BLOCK,
                 adpcm_ms: None,
                 adpcm_ima: None,
-                big_endian: false,
+                big_endian,
                 format_tag: format,
             })
         }
@@ -186,10 +183,14 @@ pub(super) fn parse_fmt_chunk(
             if block_align == 0 {
                 return Err(WavError::format(FormatKind::Adpcm));
             }
-            let extra_size = u64::from(read_u16_endian(mss, big_endian)?);
+            let extra_size = u32::from(read_u16_endian(mss, big_endian)?);
+            let rem = chunk_len.saturating_sub(18);
+            if extra_size > rem {
+                return Err(WavError::format(FormatKind::MalformedFmt));
+            }
             if format == WAVE_FORMAT_ADPCM_MS {
-                // samplesPerBlock (2) + numCoefs (2) + coefs (4 * n)
-                if extra_size < 32 {
+                // samplesPerBlock (2) + numCoefs (2) + at least one coef pair (4).
+                if extra_size < 8 {
                     return Err(WavError::format(FormatKind::MalformedFmt));
                 }
                 let samples_per_block = read_u16_endian(mss, big_endian)?;
@@ -197,7 +198,7 @@ pub(super) fn parse_fmt_chunk(
                 if num_coefs == 0 || num_coefs > 256 {
                     return Err(WavError::format(FormatKind::Adpcm));
                 }
-                let coef_bytes = u64::from(num_coefs) * 4;
+                let coef_bytes = u32::from(num_coefs).saturating_mul(4);
                 if extra_size < 4 + coef_bytes {
                     return Err(WavError::format(FormatKind::Adpcm));
                 }
@@ -209,8 +210,9 @@ pub(super) fn parse_fmt_chunk(
                 }
                 let rest = extra_size - 4 - coef_bytes;
                 if rest > 0 {
-                    mss.ignore_bytes(rest)?;
+                    mss.ignore_bytes(u64::from(rest)).map_err(eof_trunc)?;
                 }
+                skip_fmt_tail(mss, rem, extra_size)?;
                 Ok(FmtFields {
                     codec: SampleCodec::MsAdpcm,
                     channels,
@@ -223,7 +225,7 @@ pub(super) fn parse_fmt_chunk(
                         coefs,
                     }),
                     adpcm_ima: None,
-                    big_endian: false,
+                    big_endian,
                     format_tag: format,
                 })
             } else {
@@ -232,6 +234,7 @@ pub(super) fn parse_fmt_chunk(
                     return Err(WavError::format(FormatKind::MalformedFmt));
                 }
                 let samples_per_block = read_u16_endian(mss, big_endian)?;
+                skip_fmt_tail(mss, rem, extra_size)?;
                 Ok(FmtFields {
                     codec: SampleCodec::ImaAdpcm,
                     channels,
@@ -243,7 +246,7 @@ pub(super) fn parse_fmt_chunk(
                         samples_per_block,
                         channels,
                     }),
-                    big_endian: false,
+                    big_endian,
                     format_tag: format,
                 })
             }
@@ -271,10 +274,12 @@ pub(super) fn parse_fmt_chunk(
             let channel_mask = read_u32_endian(mss, big_endian)?;
 
             let mut sub_format_guid = [0u8; 16];
-            mss.read_buf_exact(&mut sub_format_guid)?;
+            mss.read_buf_exact(&mut sub_format_guid)
+                .map_err(eof_trunc)?;
 
             if chunk_len > 40 {
-                mss.ignore_bytes(u64::from(chunk_len - 40))?;
+                mss.ignore_bytes(u64::from(chunk_len - 40))
+                    .map_err(eof_trunc)?;
             }
 
             let is_ambisonic = matches!(
@@ -370,7 +375,7 @@ pub(super) fn parse_fmt_chunk(
                 sample_width: width,
                 adpcm_ms: None,
                 adpcm_ima: None,
-                big_endian: false,
+                big_endian,
                 format_tag: format,
             })
         }

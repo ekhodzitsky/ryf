@@ -205,7 +205,7 @@ pub struct WavBuilder {
     pub extensible: bool,
     pub valid_bits: Option<u16>,
     pub channel_mask: Option<u32>,
-    /// fmt chunk length for plain PCM: 16, 18, or 40.
+    /// fmt chunk length for plain PCM: 16, 18, 20, or 40.
     pub pcm_fmt_len: u32,
     pub chunks_before_fmt: Vec<([u8; 4], Vec<u8>)>,
     pub chunks_before_data: Vec<([u8; 4], Vec<u8>)>,
@@ -268,11 +268,15 @@ impl WavBuilder {
                 WAVE_FORMAT_PCM => match self.pcm_fmt_len {
                     16 => {}
                     18 => v.extend_from_slice(&0u16.to_le_bytes()),
+                    20 => {
+                        v.extend_from_slice(&0u16.to_le_bytes());
+                        v.extend_from_slice(&[0u8; 2]);
+                    }
                     40 => {
                         v.extend_from_slice(&22u16.to_le_bytes());
                         v.extend_from_slice(&[0u8; 22]);
                     }
-                    _ => unreachable!("test builder: pcm_fmt_len must be 16/18/40"),
+                    _ => unreachable!("test builder: pcm_fmt_len must be 16/18/20/40"),
                 },
                 WAVE_FORMAT_ALAW | WAVE_FORMAT_MULAW => {
                     // cbSize = 0: canonical 18-byte g711 fmt chunk.

@@ -1,7 +1,5 @@
 //! Microsoft GSM 06.10 pull / collect (65-byte blocks to 320 PCM frames).
 
-use std::io::{Seek, SeekFrom};
-
 use super::{DecodePlan, check_duration, emit_mono_block, pcm_short, scratch_frames};
 use crate::error::{Result, WavError};
 use crate::gsm::{self, GsmDecoder, MS_BLOCK, MS_SAMPLES};
@@ -14,7 +12,7 @@ pub(super) fn collect_gsm(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Result
         check_duration(total, plan.max_samples, plan.sample_rate)?;
     }
     if total == 0 {
-        return Ok(Vec::new());
+        return Ok(super::empty_planes(plan.mode, 1));
     }
     let n_blocks = total.div_ceil(MS_SAMPLES);
     let need = n_blocks.saturating_mul(MS_BLOCK);
@@ -31,8 +29,7 @@ pub(super) fn collect_gsm(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Result
     };
     plane.truncate(total);
     if mss.remaining_slice().is_some() {
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
     }
     Ok(vec![plane])
 }
@@ -67,8 +64,7 @@ where
         }
         let mut decoded = 0usize;
         let n = pull.emit(&rest[..need], total, &mut decoded, rate, on_block)?;
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(n);
     }
 

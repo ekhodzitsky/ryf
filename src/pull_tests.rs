@@ -16,6 +16,14 @@ fn block_and_duration_helpers() {
     assert!(check_duration(30, 20, 16_000).is_err());
     assert!(!need_duration_check(10, 20));
     assert!(need_duration_check(30, 20));
+    // IMA mono ba=36: 1 + 2*(36-4) = 65. MS mono ba=32: 2 + 2*(32-7) = 52.
+    assert_eq!(adpcm_est_frames(36, 36, 1, true), 65);
+    assert_eq!(adpcm_est_frames(72, 36, 1, true), 130);
+    assert_eq!(adpcm_est_frames(32, 32, 1, false), 52);
+    assert_eq!(adpcm_est_frames(32, 0, 1, true), 0);
+    assert_eq!(adpcm_frames_capped(32, 32, 1, false, Some(10)), 10);
+    assert_eq!(adpcm_frames_capped(32, 32, 1, false, Some(1_000)), 52);
+    assert_eq!(adpcm_frames_capped(32, 32, 1, false, Some(0)), 52);
 }
 
 #[test]
@@ -60,6 +68,15 @@ fn stream_info_eq() {
     };
     let b = a;
     assert_eq!(a, b);
+}
+
+#[test]
+fn short_read_is_truncated() {
+    use crate::error::FormatKind;
+    assert!(matches!(
+        pcm_short("wav: short s16 data"),
+        WavError::Format(FormatKind::Truncated)
+    ));
 }
 
 #[test]

@@ -308,5 +308,8 @@ mod riff;
 pub(crate) use riff::parse_header;
 
 #[cfg(test)]
+#[path = "../header_more_tests.rs"]
+mod header_more_tests;
+#[cfg(test)]
 #[path = "../header_tests.rs"]
 mod header_tests;

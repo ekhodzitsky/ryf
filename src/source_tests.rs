@@ -25,7 +25,10 @@ fn ignore_and_file() -> Result<()> {
     let mut tmp = tempfile::NamedTempFile::new()?;
     tmp.write_all(b"abc")?;
     tmp.flush()?;
-    let mut s = ByteSource::from_file(std::fs::File::open(tmp.path())?);
+    let mut f = std::fs::File::open(tmp.path())?;
+    f.seek(SeekFrom::End(0))?;
+    let mut s = ByteSource::from_file(f);
+    assert_eq!(s.pos(), 0);
     assert_eq!(s.read_u8()?, b'a');
     Ok(())
 }
@@ -46,7 +49,13 @@ fn memory_seek_and_integer_helpers() -> Result<()> {
     assert!(s.seek(SeekFrom::Current(-100)).is_err());
     s.seek(SeekFrom::Start(32))?;
     assert_eq!(s.remaining_slice(), Some(&[][..]));
+    s.seek(SeekFrom::Start(1u64 << 63))?;
+    assert_eq!(s.pos(), 1u64 << 63);
     assert_eq!(s.read(&mut [0u8; 4])?, 0);
+    s.seek(SeekFrom::Current(4))?;
+    assert_eq!(s.pos(), (1u64 << 63) + 4);
+    s.seek(SeekFrom::Current(-4))?;
+    assert_eq!(s.pos(), 1u64 << 63);
     s.ignore_bytes(0)?;
     Ok(())
 }

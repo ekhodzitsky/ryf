@@ -1,7 +1,5 @@
 //! Streaming PCM pull loops (s16 / f32 / generic).
 
-use std::io::Seek;
-
 use super::{
     StreamBlock, check_duration, emit_mono_block, emit_split_block, need_duration_check, pcm_short,
     scratch_frames,
@@ -25,8 +23,6 @@ pub(super) fn pull_mono_s16<F>(
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    use std::io::SeekFrom;
-
     let block_frames = scratch_frames(2, total_frames);
     let check = need_duration_check(total_frames, max_samples);
     let mut f32b = vec![0.0f32; block_frames];
@@ -50,8 +46,7 @@ where
             }
             emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
         }
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(decoded);
     }
 
@@ -88,8 +83,6 @@ pub(super) fn pull_mix_s16<F>(
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    use std::io::SeekFrom;
-
     let block_frames = scratch_frames(frame_bytes, total_frames);
     let check = need_duration_check(total_frames, max_samples);
     let mut f32b = vec![0.0f32; block_frames];
@@ -112,8 +105,7 @@ where
             }
             emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
         }
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(decoded);
     }
 
@@ -147,8 +139,6 @@ pub(super) fn pull_mono_f32<F>(
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    use std::io::SeekFrom;
-
     let block_frames = scratch_frames(4, total_frames);
     let check = need_duration_check(total_frames, max_samples);
     let mut f32b = vec![0.0f32; block_frames];
@@ -171,8 +161,7 @@ where
             }
             emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
         }
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(decoded);
     }
 
@@ -209,8 +198,6 @@ pub(super) fn pull_split_s16<F>(
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    use std::io::SeekFrom;
-
     let block_frames = scratch_frames(frame_bytes, total_frames);
     let check = need_duration_check(total_frames, max_samples);
     let mut planar: Vec<Vec<f32>> = (0..channels).map(|_| vec![0.0f32; block_frames]).collect();
@@ -237,8 +224,7 @@ where
             }
             emit_split_block(sample_rate, frames_this, &planar, on_block)?;
         }
-        mss.seek(SeekFrom::Current(need as i64))
-            .map_err(WavError::packet_io)?;
+        mss.advance(need as u64).map_err(WavError::packet_io)?;
         return Ok(decoded);
     }
 

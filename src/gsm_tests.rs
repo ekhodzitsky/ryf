@@ -101,6 +101,16 @@ fn headerless_rejects() {
 }
 
 #[test]
+fn empty_gsm_wave_is_empty() -> crate::Result<()> {
+    let wav = wrap_gsm(&[], true, MS_BLOCK as u16, 1);
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.num_channels(), 1);
+    assert_eq!(d.frames(), 0);
+    assert!(matches!(crate::decode_f32(&wav), Err(WavError::Empty)));
+    Ok(())
+}
+
+#[test]
 fn wave_matches_headerless() -> crate::Result<()> {
     let raw = pattern_blocks(2);
     let from_raw = decode_gsm_mono(&raw)?;

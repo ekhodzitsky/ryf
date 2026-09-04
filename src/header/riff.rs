@@ -7,29 +7,40 @@ use super::{
 };
 use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
+use std::io::{self, Read, Seek, SeekFrom};
+
+pub(super) fn eof_trunc(err: io::Error) -> WavError {
+    if err.kind() == io::ErrorKind::UnexpectedEof {
+        WavError::format(FormatKind::Truncated)
+    } else {
+        WavError::Io(err)
+    }
+}
 
 pub(crate) fn parse_header(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     parse_header_inner(mss)
 }
 
 fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
-    // Peek first 16 bytes to distinguish classic RIFF family from Sony W64.
-    let head16 = {
-        let mut b = [0u8; 16];
-        mss.read_buf_exact(&mut b)
-            .map_err(|_e| WavError::format(FormatKind::Truncated))?;
-        b
-    };
-    if head16 == W64_GUID_RIFF {
-        // Rewind already consumed 16 - still at offset 16; W64 path continues.
+    // Peek up to 16 bytes to distinguish classic RIFF from Sony W64.
+    // A 12-byte `RIFF....WAVE` is a complete empty container (MissingChunk),
+    // not Truncated: do not require 16 bytes up front.
+    let mut head16 = [0u8; 16];
+    let mut filled = 0usize;
+    while filled < head16.len() {
+        match mss.read(&mut head16[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) => return Err(eof_trunc(e)),
+        }
+    }
+    if filled == 16 && head16 == W64_GUID_RIFF {
+        // Stream is at offset 16; W64 path continues.
         return parse_header_w64(mss);
     }
-    // Classic fourcc containers: rewind to 0 and re-parse from the start.
-    use std::io::{Seek, SeekFrom};
-    mss.seek(SeekFrom::Start(0))
-        .map_err(|_e| WavError::format(FormatKind::Truncated))?;
+    mss.seek(SeekFrom::Start(0)).map_err(eof_trunc)?;
 
-    let marker = mss.read_quad_bytes()?;
+    let marker = mss.read_quad_bytes().map_err(eof_trunc)?;
     let container = match &marker {
         b"RIFF" => Container::Riff,
         b"RIFX" => Container::Rifx,
@@ -45,7 +56,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         return Err(WavError::format(FormatKind::MalformedChunk));
     }
 
-    let riff_form = mss.read_quad_bytes()?;
+    let riff_form = mss.read_quad_bytes().map_err(eof_trunc)?;
     if &riff_form != b"WAVE" {
         return Err(WavError::NotWave);
     }
@@ -72,7 +83,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         }
 
         if consumed & 0x1 == 1 {
-            let _pad = mss.read_u8()?;
+            let _pad = mss.read_u8().map_err(eof_trunc)?;
             consumed += 1;
         }
 
@@ -82,7 +93,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             break;
         }
 
-        let tag = mss.read_quad_bytes()?;
+        let tag = mss.read_quad_bytes().map_err(eof_trunc)?;
         let chunk_len_u32 = read_u32_endian(mss, be)?;
         consumed += 8;
 
@@ -115,16 +126,16 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 let riff_size = read_u64_le(mss)?;
                 let data_size = read_u64_le(mss)?;
                 let sample_count = read_u64_le(mss)?;
-                let table_len = mss.read_u32()?;
+                let table_len = mss.read_u32().map_err(eof_trunc)?;
                 // Skip optional size table (12 bytes per entry).
                 let table_bytes = u64::from(table_len).saturating_mul(12);
                 let rest = chunk_len.saturating_sub(28);
                 let skip = table_bytes.min(rest);
                 if skip > 0 {
-                    mss.ignore_bytes(skip)?;
+                    mss.ignore_bytes(skip).map_err(eof_trunc)?;
                 }
                 if rest > skip {
-                    mss.ignore_bytes(rest - skip)?;
+                    mss.ignore_bytes(rest - skip).map_err(eof_trunc)?;
                 }
                 // riffSize is the size of the RF64 chunk body after the first 8 bytes,
                 // i.e. same meaning as the RIFF chunk size field: data after the form is riffSize-4.
@@ -159,9 +170,12 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 if !is_rf64 && chunk_len != 4 {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
-                fact_sample_count = Some(u64::from(read_u32_endian(mss, be)?));
+                let n = u64::from(read_u32_endian(mss, be)?);
+                if n > 0 {
+                    fact_sample_count = Some(n);
+                }
                 if chunk_len > 4 {
-                    mss.ignore_bytes(chunk_len - 4)?;
+                    mss.ignore_bytes(chunk_len - 4).map_err(eof_trunc)?;
                 }
             }
             b"LIST" => {
@@ -171,7 +185,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 if chunk_len_u32 == u32::MAX {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
-                mss.ignore_bytes(chunk_len)?;
+                mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
             }
             b"data" => {
                 let fmt = match fmt {
@@ -198,7 +212,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 if chunk_len_u32 == u32::MAX {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
-                mss.ignore_bytes(chunk_len)?;
+                mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
             }
         }
     }
@@ -208,15 +222,13 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
 
 pub(super) fn read_u64_le(mss: &mut ByteSource<'_>) -> Result<u64> {
     let mut buf = [0u8; 8];
-    mss.read_buf_exact(&mut buf)
-        .map_err(|_e| WavError::format(FormatKind::Truncated))?;
+    mss.read_buf_exact(&mut buf).map_err(eof_trunc)?;
     Ok(u64::from_le_bytes(buf))
 }
 
 pub(super) fn read_u32_endian(mss: &mut ByteSource<'_>, big_endian: bool) -> Result<u32> {
     let mut buf = [0u8; 4];
-    mss.read_buf_exact(&mut buf)
-        .map_err(|_e| WavError::format(FormatKind::Truncated))?;
+    mss.read_buf_exact(&mut buf).map_err(eof_trunc)?;
     Ok(if big_endian {
         u32::from_be_bytes(buf)
     } else {
@@ -226,8 +238,7 @@ pub(super) fn read_u32_endian(mss: &mut ByteSource<'_>, big_endian: bool) -> Res
 
 pub(super) fn read_u16_endian(mss: &mut ByteSource<'_>, big_endian: bool) -> Result<u16> {
     let mut buf = [0u8; 2];
-    mss.read_buf_exact(&mut buf)
-        .map_err(|_e| WavError::format(FormatKind::Truncated))?;
+    mss.read_buf_exact(&mut buf).map_err(eof_trunc)?;
     Ok(if big_endian {
         u16::from_be_bytes(buf)
     } else {
@@ -240,8 +251,7 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     // size of outer riff chunk (includes GUID+size fields).
     let _riff_size = read_u64_le(mss)?;
     let mut wave_guid = [0u8; 16];
-    mss.read_buf_exact(&mut wave_guid)
-        .map_err(|_e| WavError::format(FormatKind::Truncated))?;
+    mss.read_buf_exact(&mut wave_guid).map_err(eof_trunc)?;
     if wave_guid != W64_GUID_WAVE {
         return Err(WavError::NotWave);
     }
@@ -253,12 +263,11 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         let mut guid = [0u8; 16];
         match mss.read_buf_exact(&mut guid) {
             Ok(()) => {}
-            Err(_) => break,
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(eof_trunc(e)),
         }
-        let chunk_size = match read_u64_le(mss) {
-            Ok(s) => s,
-            Err(_) => break,
-        };
+        // GUID was read; a short size field is Truncated, not MissingChunk.
+        let chunk_size = read_u64_le(mss)?;
         // chunk_size includes the 24-byte header (16 GUID + 8 size).
         if chunk_size < 24 {
             return Err(WavError::format(FormatKind::MalformedChunk));
@@ -276,9 +285,12 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             if data_len < 4 {
                 return Err(WavError::format(FormatKind::MalformedChunk));
             }
-            fact_sample_count = Some(u64::from(mss.read_u32()?));
+            let n = u64::from(mss.read_u32().map_err(eof_trunc)?);
+            if n > 0 {
+                fact_sample_count = Some(n);
+            }
             if data_len > 4 {
-                mss.ignore_bytes(data_len - 4)?;
+                mss.ignore_bytes(data_len - 4).map_err(eof_trunc)?;
             }
         } else if guid == W64_GUID_DATA {
             let fmt = fmt.ok_or_else(|| WavError::format(FormatKind::MissingChunk))?;
@@ -290,13 +302,13 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 declared_sample_count: fact_sample_count,
             });
         } else {
-            mss.ignore_bytes(data_len)?;
+            mss.ignore_bytes(data_len).map_err(eof_trunc)?;
         }
 
         // Pad to 8-byte boundary after chunk body.
         let pad = (8 - (data_len % 8)) % 8;
         if pad > 0 {
-            mss.ignore_bytes(pad)?;
+            mss.ignore_bytes(pad).map_err(eof_trunc)?;
         }
     }
     Err(WavError::format(FormatKind::MissingChunk))

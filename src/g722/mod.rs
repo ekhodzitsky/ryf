@@ -30,8 +30,8 @@ pub(crate) fn pcm_frames(bytes: u64, channels: usize) -> u64 {
 pub(crate) fn pcm_frames_capped(bytes: u64, channels: usize, declared: Option<u64>) -> u64 {
     let frames = pcm_frames(bytes, channels);
     match declared {
-        Some(sc) => frames.min(sc),
-        None => frames,
+        Some(sc) if sc > 0 => frames.min(sc),
+        _ => frames,
     }
 }
 
