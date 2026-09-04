@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-04
+
 ### Changed
 
-- README and crate description: product first (WAVE to planar f32,
-  codecs, zero deps). No "faster than hound" tagline. Timings live in
-  the comparison table with machine and clip named. No slogan.
+- Crate description and README: WAVE to planar f32, codecs, zero deps.
+  No slogan. No "faster than hound" tagline. Timings live in the
+  comparison table with machine and clip named.
 - Docs and comments use ordinary punctuation (no `->` in prose).
 
 ## [0.5.0] - 2026-09-03
@@ -216,7 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`header`, `convert`, `pull`, `adpcm`, `wav_tests`). Decode behavior is
   unchanged. README layout lists the split directories.
 
-[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/ekhodzitsky/ryf/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ekhodzitsky/ryf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/ekhodzitsky/ryf/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/ekhodzitsky/ryf/compare/v0.3.2...v0.4.0
