@@ -80,22 +80,8 @@ pub(super) fn parse_fmt_chunk(
             })
         }
         WAVE_FORMAT_IEEE_FLOAT => {
-            match chunk_len {
-                16 => {}
-                18 => {
-                    let extra_size = read_u16_endian(mss, big_endian)?;
-                    if extra_size != 0 {
-                        return Err(WavError::format(FormatKind::MalformedFmt));
-                    }
-                }
-                40 => {
-                    mss.ignore_bytes(24).map_err(eof_trunc)?;
-                }
-                n if n > 18 => {
-                    mss.ignore_bytes(u64::from(n - 16)).map_err(eof_trunc)?;
-                }
-                _ => return Err(WavError::format(FormatKind::MalformedFmt)),
-            }
+            // Canonical 16 / 18; skip surplus (wild cbSize, Wave64 pad).
+            skip_fmt_extra(mss, chunk_len, big_endian)?;
 
             let width = container_width(block_align, num_channels, bits_per_sample)?;
             let (codec, width) = match (bits_per_sample, width) {

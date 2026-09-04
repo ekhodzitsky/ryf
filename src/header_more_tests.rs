@@ -31,10 +31,18 @@ fn fmt_pcm_ieee_g711_error_matrix() -> Result<()> {
         parse_ok(&riff(&ieee_wild, &[0u8; 8]))?.fmt.codec,
         SampleCodec::F32
     );
-    assert!(parse_err(&riff(&ieee_fmt(&[0], 32, 4, 1), &[0u8; 8]))); // len 17
-    let mut ieee18_bad = ieee_fmt(&0u16.to_le_bytes(), 32, 4, 1);
-    ieee18_bad[16] = 1; // cbSize != 0
-    assert!(parse_err(&riff(&ieee18_bad, &[0u8; 8])));
+    assert_eq!(
+        parse_ok(&riff(&ieee_fmt(&[0], 32, 4, 1), &[0u8; 8]))?
+            .fmt
+            .codec,
+        SampleCodec::F32
+    ); // len 17 (ffmpeg accepts)
+    let mut ieee18_cb = ieee_fmt(&0u16.to_le_bytes(), 32, 4, 1);
+    ieee18_cb[16] = 1; // cbSize != 0, no extra bytes in an 18-byte chunk
+    assert_eq!(
+        parse_ok(&riff(&ieee18_cb, &[0u8; 8]))?.fmt.codec,
+        SampleCodec::F32
+    );
     assert!(parse_err(&riff(&ieee_fmt(&[], 16, 2, 1), &[0u8; 4]))); // bits not 32/64
     let padded_f32 = ieee_fmt(&[], 32, 8, 1); // width 8 >= 4
     assert_eq!(parse_ok(&riff(&padded_f32, &[0u8; 8]))?.fmt.sample_width, 8);

@@ -417,9 +417,7 @@ fn test_diff_ieee_fmt_len_18() -> Result<()> {
     file.extend_from_slice(b"WAVE");
     file.extend_from_slice(&body);
     assert_bit_exact_both_modes("ieee fmt len 18", &file);
-    // cbSize != 0 must be rejected by both.
-    let mut bad = file.clone();
-    bad[36] = 1; // cbSize field is 1
-    assert_both_err("ieee fmt len 18 cbSize=1", &bad);
+    file[36] = 1; // cbSize != 0; ffmpeg still decodes
+    assert_bit_exact_both_modes("ieee fmt 18 cbSize 1", &file);
     Ok(())
 }

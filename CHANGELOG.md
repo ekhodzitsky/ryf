@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before the classic path.
 - PCM `fmt ` lengths other than 16 / 18 / 40 are accepted (surplus
   skipped). ffmpeg already decoded `fmt ` 20 and Wave64-padded 24.
+- IEEE `fmt ` 18 with non-zero `cbSize` (and odd lengths such as 17)
+  skip the extra bytes instead of `MalformedFmt`. ffmpeg already did.
 
 ## [0.6.0] - 2026-09-04
 
