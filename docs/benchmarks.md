@@ -7,7 +7,7 @@ Who is timed, and how:
 
 | Peer | Decode | Encode |
 |---|---|---|
-| **ryf** | `decode_bytes` -> mixed `f32` | LE memcpy pack + `encode_s16` / `encode_f32` |
+| **ryf** | `decode_bytes` to mixed `f32` | LE memcpy pack + `encode_s16` / `encode_f32` |
 | **hound** 3.5 | sample iterator; i16 `/ 32768`, stereo sum / n | `write_sample` per sample |
 | **symphonia** 0.5 (`wav`+`pcm` only) | probe + PCM decoder from a zero-copy slice, then the same mix | **no encode** |
 | **wavers** 1.5 | `Wav::new(Cursor)` + `read::<f32>()`, then the same mix | path-only - **not timed** |
@@ -22,8 +22,8 @@ Apple Silicon (aarch64, NEON), rustc 1.88, `cargo bench --bench wav --features b
 
 | Workload | ryf | hound | symphonia | wavers | dr_wav | vs h / sy / wv / dr |
 |---|---|---|---|---|---|---|
-| decode PCM16 mono -> f32 | 3.78 mus | 186 mus | 102 mus | 18.5 mus | 16.3 mus | **49x / 27x / 4.9x / 4.3x** |
-| decode PCM16 stereo mix -> f32 | 9.74 mus | 431 mus | 227 mus | 91.7 mus | 77.7 mus | **44x / 23x / 9.4x / 8.0x** |
+| decode PCM16 mono to f32 | 3.78 mus | 186 mus | 102 mus | 18.5 mus | 16.3 mus | **49x / 27x / 4.9x / 4.3x** |
+| decode PCM16 stereo mix to f32 | 9.74 mus | 431 mus | 227 mus | 91.7 mus | 77.7 mus | **44x / 23x / 9.4x / 8.0x** |
 | decode IEEE f32 mono | 3.56 mus | 204 mus | 106 mus | 19.0 mus* | 9.39 mus | **57x / 30x / 5.3x / 2.6x** |
 | encode PCM16 mono (from i16) | 5.72 mus** | 112 mus | - | - | 5.42 mus | **20x** vs hound; **tie** vs C |
 | encode IEEE f32 mono | 3.30 mus | 43.9 mus | - | - | 9.12 mus | **13x** vs hound; **2.8x** vs C |

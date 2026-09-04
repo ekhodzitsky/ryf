@@ -30,7 +30,7 @@ fn builders_and_max_frames() {
     assert_eq!(u.max_frames(8_000), 12_000);
     // Rate is clamped by max_decode_sample_rate.
     assert_eq!(u.max_frames(48_000), 12_000);
-    // Non-finite / non-positive -> 0.
+    // Non-finite / non-positive is 0.
     assert_eq!(
         DecodeOptions::default()
             .with_max_duration_secs(f64::NAN)

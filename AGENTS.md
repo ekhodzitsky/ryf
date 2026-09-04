@@ -1,8 +1,6 @@
 # ryf - Agent Guide
 
-Just wav.
-
-Pure-Rust WAVE family **codec**. One crate. No cloud. No Python.
+Pure-Rust WAVE **codec**. One crate. No cloud. No Python. WAVE only.
 
 Input: WAVE bytes or a seekable file. Output: planar `f32` at the file's
 native sample rate.
@@ -22,8 +20,8 @@ native sample rate.
   No ADPCM / G.711 / G.722 / GSM / RIFX encode.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
-- Crate name is `ryf`. Slogan is **Just wav.** Not a family prefix.
-  Published on crates.io (`ryf = "0.5"`).
+- Crate name is `ryf`. Not a family prefix. Published on crates.io
+  (`ryf = "0.5"`). No slogan.
 
 ## How it runs
 
@@ -60,8 +58,8 @@ Caps: `DecodeOptions::default()` is `unbounded` + split;
 
 - No `unwrap` / `expect` in library modules. Tests may still have harvest
   `unwrap`; convert them to `?` when touching a test file.
-- English for comments, docs, commits. Documentation is ASCII only
-  (no arrows, em dashes, or similar).
+- English for comments, docs, commits. Documentation is ASCII only.
+  Ordinary punctuation in prose. No arrows or `->` outside Rust syntax.
 - Implementation `src/**/*.rs`: max 400 lines. Test files: max 500.
 - `lib.rs`: module tree + public re-exports only.
 - Tests live in sibling `*_tests.rs`.

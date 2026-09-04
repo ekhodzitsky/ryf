@@ -7,7 +7,7 @@ use crate::ChannelMode;
 /// [`DecodeOptions::unbounded`] (split channels).
 pub const DEFAULT_MAX_DURATION_SECS: f64 = 7200.0;
 pub const DEFAULT_MAX_SAMPLE_RATE: u32 = 192_000;
-/// Ceiling applied when converting duration -> frame budget (limits RAM
+/// Ceiling applied when converting duration to frame budget (limits RAM
 /// estimate if a file lies about a huge sample rate).
 pub const DEFAULT_MAX_DECODE_SAMPLE_RATE: u32 = 48_000;
 /// Default planar-f32 RAM budget (covers 2 h stereo @ 48 kHz, rejects 8+ ch

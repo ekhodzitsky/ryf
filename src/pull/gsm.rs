@@ -1,4 +1,4 @@
-//! Microsoft GSM 06.10 pull / collect (65-byte blocks -> 320 PCM frames).
+//! Microsoft GSM 06.10 pull / collect (65-byte blocks to 320 PCM frames).
 
 use std::io::{Seek, SeekFrom};
 

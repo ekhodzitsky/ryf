@@ -322,9 +322,9 @@ fn test_diff_odd_size_chunks_and_padding() -> Result<()> {
     let payload = gen_payload(TestCodec::S16, &mut rng, 500, 2);
     let wav = WavBuilder {
         channels: 2,
-        chunks_before_fmt: vec![(*b"JUNK", vec![0xAA; 5])], // odd length -> pad byte
+        chunks_before_fmt: vec![(*b"JUNK", vec![0xAA; 5])], // odd length, pad byte
         chunks_before_data: vec![
-            (*b"bext", vec![0xBB; 101]), // odd length -> pad byte
+            (*b"bext", vec![0xBB; 101]), // odd length, pad byte
             (*b"cue ", vec![0xCC; 24]),
         ],
         payload,
@@ -419,7 +419,7 @@ fn test_diff_ieee_fmt_len_18() -> Result<()> {
     assert_bit_exact_both_modes("ieee fmt len 18", &file);
     // cbSize != 0 must be rejected by both.
     let mut bad = file.clone();
-    bad[36] = 1; // cbSize field -> 1
+    bad[36] = 1; // cbSize field is 1
     assert_both_err("ieee fmt len 18 cbSize=1", &bad);
     Ok(())
 }

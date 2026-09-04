@@ -30,11 +30,11 @@ fn ms_adpcm_mono_and_errors() -> Result<()> {
     let out = decode_ms_adpcm(&mut src, &params, 32, 10_000)?;
     assert!(out.len() >= 2);
 
-    // Over-budget -> TooLong (no silent truncate).
+    // Over-budget is TooLong (no silent truncate).
     let mut src = ByteSource::from_slice(&block);
     assert!(decode_ms_adpcm(&mut src, &params, 32, 3).is_err());
 
-    // Empty coefs -> default table.
+    // Empty coefs use the default table.
     let params_empty = MsAdpcmParams {
         coefs: vec![],
         ..params.clone()

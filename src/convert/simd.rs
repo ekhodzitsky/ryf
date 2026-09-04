@@ -1,9 +1,9 @@
-//! Optional SIMD s16->f32 kernels (NEON / SSE4.1 / SSE2).
+//! Optional SIMD s16 to f32 kernels (NEON / SSE4.1 / SSE2).
 
 use super::scalar::{mix_s16_stereo_scalar, split_s16_stereo_scalar};
 use super::{HALF, I16_SCALE};
 
-/// x86 SSE4.1: 8x s16 LE -> f32 via `_mm_cvtepi16_epi32` + `_mm_mul_ps`.
+/// x86 SSE4.1: 8x s16 LE to f32 via `_mm_cvtepi16_epi32` + `_mm_mul_ps`.
 ///
 /// # Safety
 /// Caller must ensure SSE4.1 is available (runtime-checked).
@@ -46,7 +46,7 @@ pub(super) unsafe fn convert_s16_mono_sse41(src: &[u8], dst: &mut [f32]) {
     }
 }
 
-/// x86 SSE2: 8x s16 LE -> f32 with true `/ 32768.0` (bit-exact with scalar).
+/// x86 SSE2: 8x s16 LE to f32 with true `/ 32768.0` (bit-exact with scalar).
 /// Used when SSE4.1 is unavailable (older CPUs).
 ///
 /// # Safety
@@ -71,7 +71,7 @@ pub(super) unsafe fn convert_s16_mono_sse2(src: &[u8], dst: &mut [f32]) {
         while i + 8 <= n {
             let p = src.as_ptr().add(i * 2) as *const __m128i;
             let v = _mm_loadu_si128(p); // 8 x i16
-            // Sign-extend i16 -> i32 (SSE2, no SSE4.1).
+            // Sign-extend i16 to i32 (SSE2, no SSE4.1).
             let sign = _mm_srai_epi16(v, 15);
             let lo = _mm_unpacklo_epi16(v, sign);
             let hi = _mm_unpackhi_epi16(v, sign);
@@ -91,7 +91,7 @@ pub(super) unsafe fn convert_s16_mono_sse2(src: &[u8], dst: &mut [f32]) {
     }
 }
 
-/// aarch64 NEON: 8x s16 -> f32 with true `/ 32768.0` (not reciprocal mul)
+/// aarch64 NEON: 8x s16 to f32 with true `/ 32768.0` (not reciprocal mul)
 /// so output stays bit-exact with the scalar / ffmpeg path.
 ///
 /// # Safety
@@ -236,7 +236,7 @@ pub(super) unsafe fn mix_s16_stereo_sse41(src: &[u8], dst: &mut [f32]) {
             let hi = _mm_cvtepi16_epi32(_mm_srli_si128(v, 8));
             let flo = _mm_mul_ps(_mm_cvtepi32_ps(lo), scale);
             let fhi = _mm_mul_ps(_mm_cvtepi32_ps(hi), scale);
-            // flo=[L0,R0,L1,R1] fhi=[L2,R2,L3,R3] -> left/right then average.
+            // flo=[L0,R0,L1,R1] fhi=[L2,R2,L3,R3]; split left/right then average.
             let left = _mm_shuffle_ps(flo, fhi, 0b10_00_10_00);
             let right = _mm_shuffle_ps(flo, fhi, 0b11_01_11_01);
             _mm_storeu_ps(

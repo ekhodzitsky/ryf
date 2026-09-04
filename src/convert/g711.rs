@@ -89,7 +89,7 @@ pub(crate) fn lut(table: &[f32; 256], b: u8) -> f32 {
     unsafe { *table.get_unchecked(b as usize) }
 }
 
-/// One byte per sample -> planar mono f32.
+/// One byte per sample to planar mono f32.
 #[inline]
 pub(crate) fn convert_mono(src: &[u8], dst: &mut [f32], table: &[f32; 256]) {
     debug_assert_eq!(src.len(), dst.len());
@@ -112,7 +112,7 @@ pub(crate) fn convert_mono(src: &[u8], dst: &mut [f32], table: &[f32; 256]) {
     }
 }
 
-/// Interleaved G.711 -> mixed mono (sum / n).
+/// Interleaved G.711 to mixed mono (sum / n).
 #[inline]
 pub(crate) fn mix(src: &[u8], dst: &mut [f32], channels: usize, table: &[f32; 256]) {
     debug_assert!(channels >= 2);
@@ -127,7 +127,7 @@ pub(crate) fn mix(src: &[u8], dst: &mut [f32], channels: usize, table: &[f32; 25
     }
 }
 
-/// Interleaved G.711 -> one plane per channel.
+/// Interleaved G.711 to one plane per channel.
 #[inline]
 pub(crate) fn split(src: &[u8], dst: &mut [&mut [f32]], table: &[f32; 256]) {
     let channels = dst.len();

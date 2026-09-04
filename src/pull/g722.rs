@@ -1,4 +1,4 @@
-//! G.722 pull / collect (stateful; 1 encoded byte -> 2 PCM samples / ch).
+//! G.722 pull / collect (stateful; 1 encoded byte is 2 PCM samples / ch).
 
 use std::io::Seek;
 

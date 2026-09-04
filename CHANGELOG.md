@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README and crate description: product first (WAVE to planar f32,
+  codecs, zero deps). No "faster than hound" tagline. Timings live in
+  the comparison table with machine and clip named. No slogan.
+- Docs and comments use ordinary punctuation (no `->` in prose).
+
 ## [0.5.0] - 2026-09-03
 
 ### Added
@@ -77,9 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking.** `f32_to_s16le` / `s16le_to_f32` use the decode scale
   (`/ 32768`). `-1.0` encodes as `i16::MIN`.
 - **Breaking.** `ByteSource` requires `Send`. `WavWriter` requires
-  `Read + Write + Seek` and auto-promotes RIFF -> RF64 like `encode`.
+  `Read + Write + Seek` and auto-promotes RIFF to RF64 like `encode`.
 - Crate rustdoc is the API, not the GitHub README.
-- README is the ingest job (untrusted / telephony WAVE -> planar `f32`);
+- README is the ingest job (untrusted / telephony WAVE to planar `f32`);
   `read` vs `read_speech` is on the first screen. Published on crates.io.
 
 ### Removed
@@ -90,7 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
-- s16->f32: multiply by `2^-15` instead of divide (bit-exact for every `i16`);
+- s16 to f32: multiply by `2^-15` instead of divide (bit-exact for every `i16`);
   NEON convert is 16-wide.
 - `encode_f32`: one memcpy of IEEE bits on little-endian hosts.
 - Classic RIFF PCM/IEEE headers written as one stack buffer.
@@ -115,7 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `read` / `read_with`: path -> planar `f32` (`speech()` caps, or explicit
+- `read` / `read_with`: path to planar `f32` (`speech()` caps, or explicit
   `DecodeOptions`). `DecodedWav::num_channels` / `frames`.
 - Dual license MIT OR Apache-2.0 (`LICENSE` + `LICENSE-APACHE`).
 - `examples/decode.rs`, `examples/encode.rs`.
@@ -200,7 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Harvest of the WAVE reader from gigastt-wav: RIFF / RIFX / RF64 / BW64 /
   Wave64, PCM 8/16/24/32, IEEE f32/f64, G.711, MS + IMA ADPCM, pull-streaming,
-  SIMD s16->f32. `ByteSource` inlined from gigastt-source. No mmap, no
+  SIMD s16 to f32. `ByteSource` inlined from gigastt-source. No mmap, no
   `zeroize`, no `tracing`. Default features are `std` only.
 
 ### Changed

@@ -8,7 +8,7 @@ ffmpeg. Product path is pure Rust. C is only an optional Criterion peer.
 
 ## Timed (in-process, same bytes)
 
-Same classic RIFF clip (2 s @ 16 kHz -> mixed planar `f32`). Numbers:
+Same classic RIFF clip (2 s @ 16 kHz to mixed planar `f32`). Numbers:
 [benchmarks.md](benchmarks.md).
 
 | | [ryf](https://github.com/ekhodzitsky/ryf) | [hound](https://github.com/ruuda/hound) 3.5 | [symphonia](https://github.com/pdeljanov/Symphonia) 0.5 | [wavers](https://github.com/jmg049/wavers) 1.5 | [dr_wav](https://github.com/mackron/dr_libs) 0.14 |
@@ -55,7 +55,7 @@ path. Decode: `drwav_open_memory_and_read_pcm_frames_f32`. Encode:
 
 ## Other languages (not timed)
 
-In-process Criterion is Rust<->C. These are documented, not raced:
+In-process Criterion is Rust and C. These stacks are documented, not raced:
 
 | Runtime | Typical WAV stack | Notes vs ryf |
 |---|---|---|
@@ -75,10 +75,10 @@ PCM/IEEE RIFF readers - same job as hound/wavers, not a family codec:
 | [`wav-codec`](https://crates.io/crates/wav-codec) 0.1 | New zero-dep PCM/IEEE iterator. No G.711/ADPCM/RF64. |
 | [`wav_io`](https://crates.io/crates/wav_io) | PCM utility + resample + silence split. Different product. |
 | [`riff-wave`](https://crates.io/crates/riff-wave) | Canonical PCM only. 2016-2022. |
-| [`waveadapter`](https://crates.io/crates/waveadapter) | CamillaDSP-style container -> `audioadapter` buffers. A-law/ADPCM round-trip as **raw bytes**, not decoded. |
+| [`waveadapter`](https://crates.io/crates/waveadapter) | CamillaDSP-style container to `audioadapter` buffers. A-law/ADPCM round-trip as **raw bytes**, not decoded. |
 | [`nwav`](https://crates.io/crates/nwav) | `no_std` **metadata** parser (~100 lines). Not a codec. |
 | [`pure_wav`](https://crates.io/crates/pure_wav) | `no_std` header walker. AGPL. Not a codec. |
-| [`rezin-wav`](https://crates.io/crates/rezin-wav) | Zero-dep PCM 16/24 -> `i32` stream. No f32, no telephony. |
+| [`rezin-wav`](https://crates.io/crates/rezin-wav) | Zero-dep PCM 16/24 to `i32` stream. No f32, no telephony. |
 | [`pacmog`](https://crates.io/crates/pacmog) | Embedded `include_bytes!` PCM/IMA player. MCU, not ingest. |
 
 WAVE-family or multi-format (overlap, different product):

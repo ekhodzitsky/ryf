@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 authors = ["Evgeny Khodzitsky"]
-description = "Just wav. Pure-Rust WAVE family ingest: RIFF/RIFX/RF64/BW64/Wave64, G.711, G.722, GSM, ADPCM -> planar f32. Zero default deps."
+description = "WAVE to planar f32. G.711, G.722, GSM, ADPCM, RF64. Zero deps."
 readme = "README.md"
 repository = "https://github.com/ekhodzitsky/ryf"
 homepage = "https://github.com/ekhodzitsky/ryf"
@@ -19,7 +19,7 @@ autobenches = false
 default = ["adpcm", "simd"]
 # Microsoft + IMA/DVI ADPCM (0x0002 / 0x0011).
 adpcm = []
-# NEON (aarch64) + SSE4.1/SSE2 (x86) s16->f32 convert kernels.
+# NEON (aarch64) + SSE4.1/SSE2 (x86) s16 to f32 convert kernels.
 simd = []
 # Vendored dr_wav (C) for Criterion only. Needs a C compiler. Not product path.
 bench-c = ["dep:cc"]

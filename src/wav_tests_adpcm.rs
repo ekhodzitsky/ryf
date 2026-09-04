@@ -141,7 +141,7 @@ fn test_adpcm_ffmpeg_max_abs_parity() -> Result<()> {
 }
 
 /// Offline micro-bench (no Criterion / no network): prints ns/sample for
-/// the s16->f32 kernel. Run with:
+/// the s16 to f32 kernel. Run with:
 /// `cargo test test_microbench_s16_convert -- --ignored --nocapture`
 #[test]
 #[ignore = "micro-bench: run explicitly with --ignored --nocapture"]
@@ -167,7 +167,7 @@ fn test_microbench_s16_convert() -> Result<()> {
     let elapsed = t0.elapsed();
     let ns_per_sample = elapsed.as_nanos() as f64 / (iters as f64 * frames as f64);
     eprintln!(
-        "s16->f32: {ns_per_sample:.3} ns/sample  ({frames} frames x {iters} iters, {elapsed:?})"
+        "s16 to f32: {ns_per_sample:.3} ns/sample  ({frames} frames x {iters} iters, {elapsed:?})"
     );
     assert!(dst.iter().any(|&x| x != 0.0));
     Ok(())

@@ -86,7 +86,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         let chunk_len_u32 = read_u32_endian(mss, be)?;
         consumed += 8;
 
-        // RF64: data/LIST chunk sizes may be 0xFFFFFFFF -> real size in ds64 table
+        // RF64: data/LIST chunk sizes may be 0xFFFFFFFF; real size is in ds64.
         // (we only promote `data` via ds64.dataSize for product needs).
         let chunk_len = u64::from(chunk_len_u32);
 
@@ -127,7 +127,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                     mss.ignore_bytes(rest - skip)?;
                 }
                 // riffSize is the size of the RF64 chunk body after the first 8 bytes,
-                // i.e. same meaning as RIFF chunk size field -> data after form is riffSize-4.
+                // i.e. same meaning as the RIFF chunk size field: data after the form is riffSize-4.
                 if riff_size >= 4 {
                     riff_data_len = Some(riff_size - 4);
                 }

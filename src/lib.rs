@@ -1,4 +1,4 @@
-//! Untrusted / telephony WAVE -> planar `f32`.
+//! WAVE to planar `f32`. G.711, G.722, GSM, ADPCM, RF64. Zero default deps.
 //!
 //! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
 //! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /
