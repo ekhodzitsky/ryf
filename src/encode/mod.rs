@@ -1,8 +1,7 @@
-//! WAVE encode: integer PCM 8/16/24/32, IEEE f32, 1-26 channels.
-//!
-//! Classic RIFF when it fits; RF64 when the payload would overflow a `u32`
-//! size, or via [`encode_rf64`]. Mono PCM16 helper: [`encode_s16`] /
-//! [`write_s16`]. No ADPCM / G.711 / G.722 / GSM / RIFX encode.
+//! WAVE encode: integer PCM 8/16/24/32, IEEE f32, G.711 A-law/mu-law, 1-26
+//! channels. Classic RIFF when it fits; RF64 when sizes overflow. RIFX and
+//! `WAVEFORMATEXTENSIBLE` via [`encode_rifx`] / [`encode_extensible`].
+//! No ADPCM / G.722 / GSM encode.
 
 use std::fs::File;
 use std::io::Write;
@@ -13,10 +12,13 @@ use crate::error::{Result, WavError};
 mod header;
 mod writer;
 
-use header::{frame_bytes, needs_rf64, push_header, push_rf64_header, u32_len, validate_spec};
+use header::{
+    extensible_riff_prefix, frame_bytes, needs_rf64, push_extensible_header, push_header,
+    push_rf64_header, push_rifx_header, swap_sample_bytes, u32_len, validate_spec,
+};
 pub use writer::WavWriter;
 
-/// Sample format written as little-endian WAVE (RIFF or RF64).
+/// Sample format written into a WAVE `data` chunk (RIFF, RF64, or RIFX).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteFormat {
     /// Unsigned 8-bit PCM.
@@ -29,6 +31,10 @@ pub enum WriteFormat {
     S32,
     /// IEEE float32.
     F32,
+    /// G.711 A-law (payload is already A-law bytes).
+    ALaw,
+    /// G.711 mu-law (payload is already mu-law bytes).
+    MuLaw,
 }
 
 impl WriteFormat {
@@ -36,7 +42,7 @@ impl WriteFormat {
     #[must_use]
     pub fn bits(self) -> u16 {
         match self {
-            Self::U8 => 8,
+            Self::U8 | Self::ALaw | Self::MuLaw => 8,
             Self::S16 => 16,
             Self::S24 => 24,
             Self::S32 | Self::F32 => 32,
@@ -47,7 +53,7 @@ impl WriteFormat {
     #[must_use]
     pub fn bytes_per_sample(self) -> usize {
         match self {
-            Self::U8 => 1,
+            Self::U8 | Self::ALaw | Self::MuLaw => 1,
             Self::S16 => 2,
             Self::S24 => 3,
             Self::S32 | Self::F32 => 4,
@@ -57,6 +63,17 @@ impl WriteFormat {
     #[must_use]
     pub fn is_float(self) -> bool {
         matches!(self, Self::F32)
+    }
+
+    /// WAVE `wFormatTag` (extensible uses `0xFFFE` instead).
+    #[must_use]
+    pub fn tag(self) -> u16 {
+        match self {
+            Self::U8 | Self::S16 | Self::S24 | Self::S32 => 1,
+            Self::F32 => 3,
+            Self::ALaw => 6,
+            Self::MuLaw => 7,
+        }
     }
 }
 
@@ -112,6 +129,24 @@ impl WriteSpec {
             sample_rate,
             channels,
             format: WriteFormat::F32,
+        }
+    }
+
+    #[must_use]
+    pub fn alaw(sample_rate: u32, channels: u16) -> Self {
+        Self {
+            sample_rate,
+            channels,
+            format: WriteFormat::ALaw,
+        }
+    }
+
+    #[must_use]
+    pub fn mulaw(sample_rate: u32, channels: u16) -> Self {
+        Self {
+            sample_rate,
+            channels,
+            format: WriteFormat::MuLaw,
         }
     }
 }
@@ -212,6 +247,69 @@ pub fn encode_f32(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Ve
     Ok(out)
 }
 
+/// Compress interleaved f32 to G.711 A-law WAVE.
+pub fn encode_alaw(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Vec<u8>> {
+    encode_g711(samples, sample_rate, channels, true)
+}
+
+/// Compress interleaved f32 to G.711 mu-law WAVE.
+pub fn encode_mulaw(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Vec<u8>> {
+    encode_g711(samples, sample_rate, channels, false)
+}
+
+fn encode_g711(samples: &[f32], sample_rate: u32, channels: u16, alaw: bool) -> Result<Vec<u8>> {
+    let spec = if alaw {
+        WriteSpec::alaw(sample_rate, channels)
+    } else {
+        WriteSpec::mulaw(sample_rate, channels)
+    };
+    validate_spec(spec)?;
+    let ch = usize::from(channels);
+    if !samples.len().is_multiple_of(ch) {
+        return Err(WavError::OddPcm);
+    }
+    let s16 = crate::f32_to_s16le(samples);
+    let packed = crate::convert::g711::s16le_to_g711(&s16, alaw)?;
+    encode(spec, &packed)
+}
+
+/// Encode as RIFX (big-endian). `pcm` is the same little-endian payload as [`encode`].
+pub fn encode_rifx(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
+    validate_spec(spec)?;
+    let fb = frame_bytes(spec)?;
+    if !pcm.len().is_multiple_of(fb) {
+        return Err(WavError::OddPcm);
+    }
+    if needs_rf64(spec, pcm.len() as u64) {
+        return Err(WavError::RiffTooLarge);
+    }
+    let data_len = u32_len(pcm.len())?;
+    let payload = swap_sample_bytes(pcm, spec.format.bytes_per_sample());
+    let mut out = Vec::with_capacity(58usize.saturating_add(payload.len()));
+    push_rifx_header(&mut out, spec, data_len)?;
+    out.extend_from_slice(&payload);
+    Ok(out)
+}
+
+/// Encode with `WAVEFORMATEXTENSIBLE` (`fmt ` size 40).
+pub fn encode_extensible(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
+    validate_spec(spec)?;
+    let fb = frame_bytes(spec)?;
+    if !pcm.len().is_multiple_of(fb) {
+        return Err(WavError::OddPcm);
+    }
+    if u64::from(extensible_riff_prefix(spec)).saturating_add(pcm.len() as u64)
+        > u64::from(u32::MAX)
+    {
+        return Err(WavError::RiffTooLarge);
+    }
+    let data_len = u32_len(pcm.len())?;
+    let mut out = Vec::with_capacity(80usize.saturating_add(pcm.len()));
+    push_extensible_header(&mut out, spec, data_len)?;
+    out.extend_from_slice(pcm);
+    Ok(out)
+}
+
 fn append_f32_le(out: &mut Vec<u8>, samples: &[f32]) {
     #[cfg(target_endian = "little")]
     {
@@ -228,6 +326,9 @@ fn append_f32_le(out: &mut Vec<u8>, samples: &[f32]) {
     }
 }
 
+#[cfg(test)]
+#[path = "../encode_more_tests.rs"]
+mod encode_more_tests;
 #[cfg(test)]
 #[path = "../encode_tests.rs"]
 mod encode_tests;

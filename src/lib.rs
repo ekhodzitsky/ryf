@@ -5,8 +5,9 @@
 //! [`DecodeOptions::speech`]. G.711 / G.722 / GSM: WAVE tags plus headerless
 //! [`decode_g711`] / [`decode_g722`] / [`decode_gsm`] (G.722 is 64 kbit/s
 //! only, output 16 kHz; GSM is 8 kHz wav49). Write: PCM U8/S16/S24/S32 +
-//! IEEE f32, RIFF or RF64 ([`encode`] / [`WavWriter`]). No ADPCM / G.711 /
-//! G.722 / GSM / RIFX encode.
+//! IEEE f32, G.711 A-law/mu-law, RIFF / RF64 / RIFX ([`encode`] /
+//! [`encode_alaw`] / [`encode_rifx`] / [`encode_extensible`] /
+//! [`WavWriter`]). No ADPCM / G.722 / GSM encode.
 //!
 //! [`DecodedWav`], [`WavError`], [`WriteSpec`]. GitHub README is the crate
 //! pitch; this page is the API.
@@ -40,8 +41,8 @@ mod wav;
 
 pub use convert::{f32_to_s16le, s16le_to_f32};
 pub use encode::{
-    WavWriter, WriteFormat, WriteSpec, encode, encode_f32, encode_rf64, encode_s16, write,
-    write_f32, write_rf64, write_s16,
+    WavWriter, WriteFormat, WriteSpec, encode, encode_alaw, encode_extensible, encode_f32,
+    encode_mulaw, encode_rf64, encode_rifx, encode_s16, write, write_f32, write_rf64, write_s16,
 };
 pub use error::{FormatKind, Result, WavError};
 pub use g711::{G711Law, decode_g711, decode_g711_alaw, decode_g711_mulaw};

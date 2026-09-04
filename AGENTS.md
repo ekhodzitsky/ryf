@@ -14,14 +14,17 @@ native sample rate.
   the **product** path. `hound`, `symphonia`, `wavers`, and `criterion` are
   **dev-only** bench competitors. Optional `bench-c` vendors **dr_wav** (C)
   via `cc` for Criterion only - never linked into the library.
-- Encode is PCM U8/S16/S24/S32 + IEEE f32, 1-26 ch: classic RIFF when it
-  fits, RF64 when it does not (`encode_rf64` / `WavWriter::new_rf64` to
-  force). Mono PCM16 helper `encode_s16` / `write_s16`; `encode_f32`.
-  No ADPCM / G.711 / G.722 / GSM / RIFX encode.
+- Encode is PCM U8/S16/S24/S32 + IEEE f32 + G.711 A-law/mu-law, 1-26 ch:
+  classic RIFF when it fits, RF64 when it does not (`encode_rf64` /
+  `WavWriter::new_rf64` to force). RIFX: `encode_rifx` /
+  `WavWriter::new_rifx`. `WAVEFORMATEXTENSIBLE` PCM/IEEE:
+  `encode_extensible` / `WavWriter::new_extensible`. Mono PCM16 helper
+  `encode_s16` / `write_s16`; `encode_f32`; `encode_alaw` / `encode_mulaw`.
+  No ADPCM / G.722 / GSM encode.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Not a family prefix. Published on crates.io
-  (`ryf = "0.5"`). No slogan.
+  (`ryf = "0.6"`). No slogan.
 
 ## How it runs
 
@@ -40,7 +43,8 @@ Library: `decode_bytes` / `decode_s16` / `decode_f32` / `decode_reader` /
 `read` / `read_speech` / `read_with` / `read_s16` / `read_f32` /
 `decode_g711` / `decode_g722` / `decode_gsm` / `probe_with` / `decode_streaming` /
 `sniff_wav` / `encode` /
-`encode_rf64` / `encode_s16` / `encode_f32` / `write` / `write_s16` /
+`encode_rf64` / `encode_rifx` / `encode_extensible` / `encode_alaw` /
+`encode_mulaw` / `encode_s16` / `encode_f32` / `write` / `write_s16` /
 `write_f32` / `WavWriter`.
 Caps: `DecodeOptions::default()` is `unbounded` + split;
 `speech()` / `read_speech()` mix to mono with 2 h / 4 GiB.
@@ -50,7 +54,7 @@ Caps: `DecodeOptions::default()` is `unbounded` + split;
 - Cloud APIs
 - Python / PyO3 / ffmpeg on the product path (ffmpeg is a **test oracle**)
 - Extra crates on the default feature set
-- ADPCM / RIFX / G.711 / G.722 / GSM encode
+- ADPCM / G.722 / GSM encode
 - Shipping long PCM / listen dumps in git
   (tiny ADPCM vectors in `fixtures/` are allowed)
 

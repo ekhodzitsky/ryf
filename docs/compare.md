@@ -21,7 +21,7 @@ Same classic RIFF clip (2 s @ 16 kHz to mixed planar `f32`). Numbers:
 | G.722 | yes | no | no | no | no |
 | GSM 06.10 / wav49 | yes | no | no | no | no |
 | MS / IMA ADPCM | yes (`adpcm`) | no | limited | no | yes |
-| Write | RIFF + RF64 PCM + f32 | PCM/IEEE, extensible | **no** | PCM/IEEE (path) | PCM/IEEE/A-law/mu-law (no ADPCM write) |
+| Write | RIFF/RF64/RIFX PCM/IEEE/G.711; extensible PCM/IEEE | PCM/IEEE, extensible | **no** | PCM/IEEE (path) | PCM/IEEE/A-law/mu-law (no ADPCM write) |
 | Default deps | **none** | none | several | several | none (single `.h`) |
 | Caps | yes | no | no | no | no |
 | In harness | always | always | always | always | `--features bench-c` |

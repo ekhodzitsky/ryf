@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-04
+
+### Added
+
+- G.711 A-law / mu-law encode: `encode_alaw` / `encode_mulaw` (interleaved
+  f32) and `WriteFormat::ALaw` / `MuLaw`. Mu-law uses 16-bit segment
+  endpoints so encode matches `ulaw2linear`.
+- RIFX write: `encode_rifx` / `WavWriter::new_rifx` (PCM / IEEE / G.711).
+- `WAVEFORMATEXTENSIBLE` write: `encode_extensible` /
+  `WavWriter::new_extensible` (PCM / IEEE; G.711 is `UnsupportedCodec`).
+- RIFX ADPCM decode (block headers follow container endian).
+
+### Changed
+
+- README decode table is coverage. Write lists PCM, G.711, RF64, RIFX,
+  extensible. No ADPCM / G.722 / GSM encode.
+
+### Breaking
+
+- `WriteFormat` gains `ALaw` and `MuLaw`.
+
 ## [0.5.1] - 2026-09-04
 
 ### Changed
@@ -218,7 +239,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`header`, `convert`, `pull`, `adpcm`, `wav_tests`). Decode behavior is
   unchanged. README layout lists the split directories.
 
-[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ekhodzitsky/ryf/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ekhodzitsky/ryf/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ekhodzitsky/ryf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/ekhodzitsky/ryf/compare/v0.4.0...v0.4.1

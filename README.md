@@ -46,26 +46,24 @@ fn main() -> ryf::Result<()> {
 Headerless telephony: `decode_g711`, `decode_g722`, `decode_gsm`.
 Streaming: `decode_streaming`. Write to a path: `write_s16` / `WavWriter`.
 
-## Features
+## Decode
 
-| | Read | Write |
-|---|---|---|
-| Integer PCM | 8, 16, 24, 32 | 8, 16, 24, 32 |
-| IEEE float | f32, f64 | f32 |
-| G.711 A-law / mu-law | yes | no |
-| G.722 (64 kbit/s only) | yes | no |
-| GSM 06.10 / wav49 | yes | no |
-| MS / IMA ADPCM | yes (`adpcm`) | no |
-| `WAVEFORMATEXTENSIBLE` | PCM / IEEE / G.711 | no |
-| Wild `fmt ` / short `data` | yes | n/a |
-
-## Containers
-
-| | RIFF | RIFX (BE) | RF64 / BW64 | Wave64 |
+| | RIFF | RIFX | RF64 / BW64 | Wave64 |
 |---|---|---|---|---|
-| PCM / IEEE / G.711 / G.722 / GSM | yes | yes | yes | yes |
-| MS / IMA ADPCM | yes | no | yes | yes |
-| Write | yes | no | yes | no |
+| Integer PCM 8/16/24/32 | yes | yes | yes | yes |
+| IEEE f32 / f64 | yes | yes | yes | yes |
+| G.711 A-law / mu-law | yes | yes | yes | yes |
+| G.722 64 kbit/s | yes | yes | yes | yes |
+| GSM 06.10 / wav49 | yes | yes | yes | yes |
+| MS / IMA ADPCM | yes | yes | yes | yes |
+| `WAVEFORMATEXTENSIBLE` | PCM / IEEE / G.711 | no | yes | yes |
+| Wild `fmt ` / short `data` | yes | yes | yes | yes |
+
+## Write
+
+Integer PCM 8/16/24/32, IEEE f32, G.711 A-law / mu-law. Classic RIFF, RF64
+when `u32` sizes overflow, RIFX (`encode_rifx`), `WAVEFORMATEXTENSIBLE`
+(`encode_extensible`). Channels `1..=26`. No ADPCM / G.722 / GSM encode.
 
 ## Compared to hound, Symphonia, dr_wav
 
@@ -102,7 +100,7 @@ is a **tie** with dr_wav. Numbers: [benchmarks](docs/benchmarks.md).
 
 ```toml
 [dependencies]
-ryf = "0.5"
+ryf = "0.6"
 ```
 
 rustc **1.88**. Default features (`adpcm` + `simd`) pull **no crates**.
@@ -111,4 +109,4 @@ rustc **1.88**. Default features (`adpcm` + `simd`) pull **no crates**.
 [benchmarks](docs/benchmarks.md) | [compare](docs/compare.md) |
 [correctness](docs/correctness.md) | [CHANGELOG](CHANGELOG.md)
 
-No compressed encode, no resample, no `mmap`. Not a player. MIT OR Apache-2.0.
+WAVE only: no resample, no player, no `mmap`. MIT OR Apache-2.0.

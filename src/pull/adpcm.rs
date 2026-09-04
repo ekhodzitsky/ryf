@@ -80,6 +80,7 @@ fn visit_adpcm(
                 plan.data_len,
                 plan.max_samples,
                 plan.sample_rate,
+                plan.big_endian,
                 on_block,
             )
         }
@@ -95,6 +96,7 @@ fn visit_adpcm(
                 plan.data_len,
                 plan.max_samples,
                 plan.sample_rate,
+                plan.big_endian,
                 on_block,
             )
         }

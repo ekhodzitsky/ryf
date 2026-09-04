@@ -127,6 +127,74 @@ pub(crate) fn mix(src: &[u8], dst: &mut [f32], channels: usize, table: &[f32; 25
     }
 }
 
+const ALAW_SEG_END: [i32; 8] = [0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF];
+/// 16-bit biased endpoints (Sun 14-bit `seg_uend` does not match `ulaw2linear`).
+const ULAW_SEG_END: [i32; 8] = [0xFC, 0x1F8, 0x3F0, 0x7E0, 0xFC0, 0x1F80, 0x3F00, 0x7E00];
+
+fn search_seg(val: i32, ends: &[i32; 8]) -> usize {
+    ends.iter().position(|&e| val <= e).unwrap_or(8)
+}
+
+/// Sun `linear2alaw`.
+#[must_use]
+pub(crate) fn linear_to_alaw(pcm_val: i32) -> u8 {
+    let (mask, mag) = if pcm_val >= 0 {
+        (0xD5u8, pcm_val)
+    } else {
+        (0x55u8, -pcm_val - 8)
+    };
+    let seg = search_seg(mag, &ALAW_SEG_END);
+    if seg >= 8 {
+        0x7F ^ mask
+    } else {
+        let quant = if seg < 2 {
+            (mag >> 4) as u8
+        } else {
+            (mag >> (seg + 3)) as u8
+        };
+        (((seg as u8) << 4) | (quant & 0x0F)) ^ mask
+    }
+}
+
+/// Sun `linear2ulaw`.
+#[must_use]
+pub(crate) fn linear_to_ulaw(pcm_val: i32) -> u8 {
+    const BIAS: i32 = 0x84;
+    const CLIP: i32 = 32635;
+    let (mask, mut mag) = if pcm_val < 0 {
+        (0x7Fu8, BIAS - pcm_val)
+    } else {
+        (0xFFu8, pcm_val + BIAS)
+    };
+    if mag > CLIP {
+        mag = CLIP;
+    }
+    let seg = search_seg(mag, &ULAW_SEG_END);
+    if seg >= 8 {
+        0x7F ^ mask
+    } else {
+        let uval = ((seg as u8) << 4) | (((mag >> (seg + 3)) as u8) & 0x0F);
+        uval ^ mask
+    }
+}
+
+/// Interleaved little-endian i16 to G.711 bytes.
+pub(crate) fn s16le_to_g711(pcm: &[u8], alaw: bool) -> crate::Result<Vec<u8>> {
+    if !pcm.len().is_multiple_of(2) {
+        return Err(crate::WavError::OddPcm);
+    }
+    let mut out = Vec::with_capacity(pcm.len() / 2);
+    for s in pcm.as_chunks::<2>().0 {
+        let v = i32::from(i16::from_le_bytes(*s));
+        out.push(if alaw {
+            linear_to_alaw(v)
+        } else {
+            linear_to_ulaw(v)
+        });
+    }
+    Ok(out)
+}
+
 /// Interleaved G.711 to one plane per channel.
 #[inline]
 pub(crate) fn split(src: &[u8], dst: &mut [&mut [f32]], table: &[f32; 256]) {

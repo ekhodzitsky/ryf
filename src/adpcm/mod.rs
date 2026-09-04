@@ -63,6 +63,7 @@ pub(crate) fn for_each_ms_adpcm_block(
     data_len: u64,
     max_frames: usize,
     sample_rate: u32,
+    big_endian: bool,
     mut on_block: impl FnMut(&[i16]) -> Result<()>,
 ) -> Result<usize> {
     let ch = params.channels;
@@ -88,9 +89,9 @@ pub(crate) fn for_each_ms_adpcm_block(
         remaining -= block as u64;
 
         let decoded = if ch == 1 {
-            decode_ms_block_mono(&block_buf, coefs)?
+            decode_ms_block_mono(&block_buf, coefs, big_endian)?
         } else {
-            decode_ms_block_stereo(&block_buf, coefs)?
+            decode_ms_block_stereo(&block_buf, coefs, big_endian)?
         };
         let frames_this = decoded.len() / ch;
         if frames + frames_this > max_frames {
@@ -122,14 +123,22 @@ pub(crate) fn decode_ms_adpcm(
     let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
     out.try_reserve(hint)
         .map_err(|_| WavError::format(FormatKind::Adpcm))?;
-    for_each_ms_adpcm_block(mss, params, data_len, max_frames, 16_000, |block| {
+    for_each_ms_adpcm_block(mss, params, data_len, max_frames, 16_000, false, |block| {
         out.extend_from_slice(block);
         Ok(())
     })?;
     Ok(std::mem::take(&mut out))
 }
 
-fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> {
+pub(super) fn i16_at(block: &[u8], off: usize, be: bool) -> i16 {
+    if be {
+        i16::from_be_bytes([block[off], block[off + 1]])
+    } else {
+        i16::from_le_bytes([block[off], block[off + 1]])
+    }
+}
+
+fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)], be: bool) -> Result<Vec<i16>> {
     if block.len() < 7 {
         return Err(WavError::format(FormatKind::Adpcm));
     }
@@ -137,9 +146,9 @@ fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> 
     if predictor >= coefs.len() {
         return Err(WavError::format(FormatKind::Adpcm));
     }
-    let mut delta = i16::from_le_bytes([block[1], block[2]]);
-    let sample1 = i16::from_le_bytes([block[3], block[4]]);
-    let sample2 = i16::from_le_bytes([block[5], block[6]]);
+    let mut delta = i16_at(block, 1, be);
+    let sample1 = i16_at(block, 3, be);
+    let sample2 = i16_at(block, 5, be);
     let (c1, c2) = coefs[predictor];
 
     let mut out = Vec::with_capacity((block.len() - 7) * 2 + 2);
@@ -174,23 +183,14 @@ fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> 
     Ok(out)
 }
 
-fn decode_ms_block_stereo(block: &[u8], coefs: &[(i16, i16)]) -> Result<Vec<i16>> {
+fn decode_ms_block_stereo(block: &[u8], coefs: &[(i16, i16)], be: bool) -> Result<Vec<i16>> {
     if block.len() < 14 {
         return Err(WavError::format(FormatKind::Adpcm));
     }
     let predictor = [block[0], block[1]];
-    let mut delta = [
-        i16::from_le_bytes([block[2], block[3]]),
-        i16::from_le_bytes([block[4], block[5]]),
-    ];
-    let sample1 = [
-        i16::from_le_bytes([block[6], block[7]]),
-        i16::from_le_bytes([block[8], block[9]]),
-    ];
-    let sample2 = [
-        i16::from_le_bytes([block[10], block[11]]),
-        i16::from_le_bytes([block[12], block[13]]),
-    ];
+    let mut delta = [i16_at(block, 2, be), i16_at(block, 4, be)];
+    let sample1 = [i16_at(block, 6, be), i16_at(block, 8, be)];
+    let sample2 = [i16_at(block, 10, be), i16_at(block, 12, be)];
     for &p in &predictor {
         if p as usize >= coefs.len() {
             return Err(WavError::format(FormatKind::Adpcm));

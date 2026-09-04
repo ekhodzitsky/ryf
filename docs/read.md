@@ -10,11 +10,12 @@ Every listed codec is accepted in every listed container unless noted.
 | G.711 A-law / mu-law | yes | yes | yes | yes |
 | G.722 64 kbit/s only (tags `0x0064` / `0x0065` / `0x028F`) | yes | yes | yes | yes |
 | GSM 06.10 / wav49 (`0x0031`, 65-byte blocks) | yes | yes | yes | yes |
-| MS-ADPCM, IMA/DVI ADPCM | yes | - | yes | yes |
+| MS-ADPCM, IMA/DVI ADPCM | yes | yes | yes | yes |
 
 Also:
 
-- `WAVE_FORMAT_EXTENSIBLE` (PCM / IEEE / G.711 + Ambisonic GUIDs)
+- `WAVE_FORMAT_EXTENSIBLE` (PCM / IEEE / G.711 + Ambisonic GUIDs).
+  Not RIFX: SubFormat GUID is Microsoft on-disk (little-endian) order.
 - Wild headers: `valid_bits = 0`, empty channel mask, short `data`,
   streaming `u32::MAX` sizes, PCM fmt sizes 16 / 18 / 40
 - `TooLong` is decided from **bytes on disk**, not a lying `fact` / `ds64`

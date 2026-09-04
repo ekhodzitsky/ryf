@@ -1,4 +1,4 @@
-use super::g711::{alaw_to_linear, mulaw_to_linear};
+use super::g711::{alaw_to_linear, linear_to_alaw, linear_to_ulaw, mulaw_to_linear};
 use super::*;
 use crate::header::SampleCodec;
 
@@ -343,6 +343,20 @@ fn g711_lut_matches_expander_and_bulk() {
         assert_eq!(
             mulaw[i].to_bits(),
             (mulaw_to_linear(i as u8) as f32 / 32_768.0).to_bits()
+        );
+    }
+}
+
+#[test]
+fn g711_linear_roundtrip_codes() {
+    for c in 0..=255u8 {
+        let a = alaw_to_linear(c);
+        assert_eq!(alaw_to_linear(linear_to_alaw(i32::from(a))), a, "alaw {c}");
+        let m = mulaw_to_linear(c);
+        assert_eq!(
+            mulaw_to_linear(linear_to_ulaw(i32::from(m))),
+            m,
+            "mulaw {c}"
         );
     }
 }

@@ -176,3 +176,33 @@ fn wave_streaming_mono_and_split() -> crate::Result<()> {
     assert_eq!(info.frames, 256);
     Ok(())
 }
+
+#[test]
+fn encode_alaw_mulaw_roundtrip() -> crate::Result<()> {
+    let samples = [0.0f32, 0.25, -0.5, 0.9];
+    let alaw = crate::encode_alaw(&samples, 8_000, 1)?;
+    assert_eq!(&alaw[20..22], &6u16.to_le_bytes());
+    let d = decode_bytes(&alaw, DecodeOptions::speech())?;
+    assert_eq!(d.sample_rate, 8_000);
+    assert_eq!(d.frames(), 4);
+    for (got, src) in d.channels[0].iter().zip(samples.iter()) {
+        assert!((got - src).abs() < 0.04, "{got} vs {src}");
+    }
+
+    let mulaw = crate::encode_mulaw(&samples, 8_000, 1)?;
+    assert_eq!(&mulaw[20..22], &7u16.to_le_bytes());
+    let d = decode_bytes(&mulaw, DecodeOptions::speech())?;
+    assert_eq!(d.frames(), 4);
+    for (got, src) in d.channels[0].iter().zip(samples.iter()) {
+        assert!((got - src).abs() < 0.04, "{got} vs {src}");
+    }
+
+    let stereo = crate::encode_alaw(&[0.1, -0.1, 0.2, -0.2], 16_000, 2)?;
+    let split = decode_bytes(
+        &stereo,
+        DecodeOptions::speech().with_channel_mode(ChannelMode::Split),
+    )?;
+    assert_eq!(split.num_channels(), 2);
+    assert_eq!(split.frames(), 2);
+    Ok(())
+}

@@ -446,3 +446,34 @@ fn wav_writer_rf64_matches_encode_rf64() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn encode_rifx_s16_roundtrips() -> Result<()> {
+    let pcm = f32_to_s16le(&[0.25, -0.5, 0.0]);
+    let wav = crate::encode_rifx(WriteSpec::s16(16_000, 1), &pcm)?;
+    assert_eq!(&wav[..4], b"RIFX");
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.sample_rate, 16_000);
+    assert_eq!(d.frames(), 3);
+    let le = encode_s16(&pcm, 16_000)?;
+    let dle = decode_bytes(&le, DecodeOptions::unbounded())?;
+    assert_eq!(d.channels[0], dle.channels[0]);
+    Ok(())
+}
+
+#[test]
+fn encode_extensible_pcm_roundtrips() -> Result<()> {
+    let pcm = f32_to_s16le(&[0.1, -0.1, 0.2, -0.2]);
+    let wav = crate::encode_extensible(WriteSpec::s16(16_000, 2), &pcm)?;
+    assert_eq!(&wav[20..22], &0xFFFEu16.to_le_bytes());
+    let p = crate::probe(&mut crate::ByteSource::from_slice(&wav))?;
+    assert_eq!(p.codec, crate::ProbeCodec::PcmS16);
+    assert_eq!(p.channels, 2);
+    let d = decode_bytes(
+        &wav,
+        DecodeOptions::unbounded().with_channel_mode(ChannelMode::Split),
+    )?;
+    assert_eq!(d.num_channels(), 2);
+    assert_eq!(d.frames(), 2);
+    Ok(())
+}

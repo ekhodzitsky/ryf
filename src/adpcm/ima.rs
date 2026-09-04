@@ -25,6 +25,7 @@ pub(crate) fn for_each_ima_adpcm_block(
     data_len: u64,
     max_frames: usize,
     sample_rate: u32,
+    big_endian: bool,
     mut on_block: impl FnMut(&[i16]) -> Result<()>,
 ) -> Result<usize> {
     let ch = params.channels;
@@ -45,9 +46,9 @@ pub(crate) fn for_each_ima_adpcm_block(
         remaining -= block as u64;
 
         let decoded = if ch == 1 {
-            decode_ima_block_mono(&block_buf)?
+            decode_ima_block_mono(&block_buf, big_endian)?
         } else {
-            decode_ima_block_stereo(&block_buf)?
+            decode_ima_block_stereo(&block_buf, big_endian)?
         };
         let frames_this = decoded.len() / ch;
         if frames + frames_this > max_frames {
@@ -79,7 +80,7 @@ pub(crate) fn decode_ima_adpcm(
     let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
     out.try_reserve(hint)
         .map_err(|_| WavError::format(FormatKind::Adpcm))?;
-    for_each_ima_adpcm_block(mss, params, data_len, max_frames, 16_000, |block| {
+    for_each_ima_adpcm_block(mss, params, data_len, max_frames, 16_000, false, |block| {
         out.extend_from_slice(block);
         Ok(())
     })?;
@@ -109,11 +110,11 @@ fn decode_ima_nibble(nibble: u8, predictor: &mut i32, step_index: &mut i32) -> i
     *predictor as i16
 }
 
-pub(crate) fn decode_ima_block_mono(block: &[u8]) -> Result<Vec<i16>> {
+pub(crate) fn decode_ima_block_mono(block: &[u8], be: bool) -> Result<Vec<i16>> {
     if block.len() < 4 {
         return Err(WavError::format(FormatKind::Adpcm));
     }
-    let mut predictor = i32::from(i16::from_le_bytes([block[0], block[1]]));
+    let mut predictor = i32::from(super::i16_at(block, 0, be));
     let mut step_index = i32::from(block[2]);
     if !(0..=88).contains(&step_index) {
         return Err(WavError::format(FormatKind::Adpcm));
@@ -138,13 +139,13 @@ pub(crate) fn decode_ima_block_mono(block: &[u8]) -> Result<Vec<i16>> {
     Ok(out)
 }
 
-pub(crate) fn decode_ima_block_stereo(block: &[u8]) -> Result<Vec<i16>> {
+pub(crate) fn decode_ima_block_stereo(block: &[u8], be: bool) -> Result<Vec<i16>> {
     if block.len() < 8 {
         return Err(WavError::format(FormatKind::Adpcm));
     }
     let mut pred = [
-        i32::from(i16::from_le_bytes([block[0], block[1]])),
-        i32::from(i16::from_le_bytes([block[4], block[5]])),
+        i32::from(super::i16_at(block, 0, be)),
+        i32::from(super::i16_at(block, 4, be)),
     ];
     let mut step_idx = [i32::from(block[2]), i32::from(block[6])];
     for &s in &step_idx {
