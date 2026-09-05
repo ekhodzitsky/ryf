@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Linux x86_64 SSE Criterion numbers in [benchmarks.md](docs/benchmarks.md)
+  (AMD EPYC-Rome, 2 vCPU KVM, rustc 1.88, same harness as Apple Silicon).
+
 ## [0.7.2] - 2026-09-05
 
 ### Fixed

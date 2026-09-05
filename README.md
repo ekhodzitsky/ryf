@@ -68,9 +68,9 @@ when `u32` sizes overflow, RIFX (`encode_rifx`), `WAVEFORMATEXTENSIBLE`
 
 ## Compared to hound, Symphonia, dr_wav
 
-In-process, same 2 s @ 16 kHz RIFF, Apple Silicon. Not a file on disk,
-not Linux x86. Full matrix: [compare](docs/compare.md). Timings:
-[benchmarks](docs/benchmarks.md).
+In-process, same 2 s @ 16 kHz RIFF, Apple Silicon. Not a file on disk.
+Linux x86 SSE: [benchmarks](docs/benchmarks.md). Full matrix:
+[compare](docs/compare.md).
 
 | | ryf | hound 3.5 | Symphonia 0.5 | dr_wav 0.14 |
 |---|---|---|---|---|
@@ -85,9 +85,10 @@ not Linux x86. Full matrix: [compare](docs/compare.md). Timings:
 
 ## Speed
 
-In-memory 2 s @ 16 kHz RIFF to mixed planar `f32`. Apple Silicon (NEON).
-**Not** a file on disk, **not** Linux x86 (SSE unmeasured). Encode s16
-is a **tie** with dr_wav. Numbers: [benchmarks](docs/benchmarks.md).
+In-memory 2 s @ 16 kHz RIFF to mixed planar `f32`. Apple Silicon (NEON)
+below. Linux x86 SSE (EPYC-Rome KVM) in [benchmarks](docs/benchmarks.md).
+**Not** a file on disk. Encode s16 is a **tie** with dr_wav on this
+machine.
 
 | Workload | ryf | hound | symphonia | wavers | dr_wav |
 |---|---|---|---|---|---|

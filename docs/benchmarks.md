@@ -35,8 +35,21 @@ Apple Silicon (aarch64, NEON), rustc 1.88, `cargo bench --bench wav --features b
 full-file planar alloc). Encode PCM16 packs i16 with a LE memcpy then
 `encode_s16`. Encode f32 copies IEEE bits once (no intermediate `Vec`).
 
-These numbers are **not** a 2-hour file on disk and **not** Linux x86
-(SSE path unmeasured here).
+These numbers are **not** a 2-hour file on disk.
+
+Linux x86_64 (AMD EPYC-Rome, 2 vCPU KVM, SSE4.1), Ubuntu 26.04, rustc 1.88,
+same `cargo bench --bench wav --features bench-c`. Point estimate.
+
+| Workload | ryf | hound | symphonia | wavers | dr_wav | vs h / sy / wv / dr |
+|---|---|---|---|---|---|---|
+| decode PCM16 mono to f32 | 5.86 mus | 452 mus | 142 mus | 17.4 mus | 10.9 mus | **77x / 24x / 3.0x / 1.9x** |
+| decode PCM16 stereo mix to f32 | 15.3 mus | 966 mus | 299 mus | 96.2 mus | 91.7 mus | **63x / 20x / 6.3x / 6.0x** |
+| decode IEEE f32 mono | 5.65 mus | 210 mus | 133 mus | 10.5 mus | 7.35 mus | **37x / 24x / 1.9x / 1.3x** |
+| encode PCM16 mono (from i16) | 3.16 mus | 201 mus | - | - | 3.39 mus | **64x** vs hound |
+| encode IEEE f32 mono | 3.38 mus | 90.5 mus | - | - | 6.97 mus | **27x** vs hound; **2.1x** vs C |
+
+`decode_streaming` s16 mono is 7.26 mus. A 2 vCPU KVM is noisier than the
+Apple Silicon box; treat the ratios as order-of-magnitude, not a ranking.
 
 ```sh
 just bench          # Rust peers
