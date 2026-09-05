@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sample count is the first 4 bytes; the rest is skipped.
 - `WAVEFORMATEXTENSIBLE` channel mask bits 18+ and `SPEAKER_ALL`
   (`0x80000000`) no longer reject the file. `nChannels` wins (ffmpeg).
+- RIFF chunk size 0 (and 1..=3) is unknown length; the walk continues to
+  EOF (ffmpeg).
+- The first `fmt ` chunk wins; later `fmt ` tags are skipped (ffmpeg).
 
 ## [0.7.1] - 2026-09-05
 

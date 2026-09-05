@@ -69,18 +69,16 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     let be = container.big_endian();
 
     let riff_len_u32 = read_u32_endian(mss, be)?;
-    // RF64 always uses 0xFFFFFFFF here; real size comes from ds64.
-    if !is_rf64 && riff_len_u32 < 4 {
-        return Err(WavError::format(FormatKind::MalformedChunk));
-    }
+    // RF64 uses 0xFFFFFFFF; real size comes from ds64. Size 0 / < 4 is
+    // unknown (ffmpeg walks to EOF). u32::MAX is streaming stdout.
 
     let riff_form = mss.read_quad_bytes().map_err(eof_trunc)?;
     if &riff_form != b"WAVE" {
         return Err(WavError::NotWave);
     }
 
-    // A riff length of u32::MAX marks unknown size (ffmpeg stdout) or RF64.
-    let mut riff_data_len: Option<u64> = if is_rf64 || riff_len_u32 == u32::MAX {
+    let mut riff_data_len: Option<u64> = if is_rf64 || riff_len_u32 < 4 || riff_len_u32 == u32::MAX
+    {
         None
     } else {
         Some(u64::from(riff_len_u32 - 4))
@@ -194,9 +192,14 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 if chunk_len_u32 == u32::MAX {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
-                let mut f = parse_fmt_chunk(mss, chunk_len_u32, be)?;
-                f.big_endian = be;
-                fmt = Some(f);
+                // ffmpeg keeps the first `fmt `; later ones are skipped.
+                if fmt.is_some() {
+                    mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
+                } else {
+                    let mut f = parse_fmt_chunk(mss, chunk_len_u32, be)?;
+                    f.big_endian = be;
+                    fmt = Some(f);
+                }
             }
             b"fact" => {
                 // Canonical fact is 4 bytes. ffmpeg accepts longer on RIFF

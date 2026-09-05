@@ -175,6 +175,36 @@ fn test_extensible_valid_bits_zero_fallback() -> Result<()> {
 }
 
 #[test]
+fn test_diff_riff_size_zero_and_first_fmt() -> Result<()> {
+    let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(5), 64, 1);
+    let mut wav = WavBuilder {
+        payload: payload.clone(),
+        ..WavBuilder::new(TestCodec::S16)
+    }
+    .build();
+    wav[4..8].copy_from_slice(&0u32.to_le_bytes());
+    assert_bit_exact_both_modes("riff size 0", &wav);
+
+    let second_fmt = WavBuilder {
+        sample_rate: 8_000,
+        payload: payload.clone(),
+        ..WavBuilder::new(TestCodec::S16)
+    }
+    .fmt_body();
+    let two = WavBuilder {
+        sample_rate: 16_000,
+        chunks_before_data: vec![(*b"fmt ", second_fmt)],
+        payload,
+        ..WavBuilder::new(TestCodec::S16)
+    }
+    .build();
+    let own = own_mono_native(&two)?;
+    assert_eq!(own.0, 16_000);
+    assert_bit_exact_both_modes("first fmt wins", &two);
+    Ok(())
+}
+
+#[test]
 fn test_extensible_mask_zero_uses_nchannels() -> Result<()> {
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(3), 40, 2);
     let wav = WavBuilder {

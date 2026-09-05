@@ -139,6 +139,36 @@ fn data_before_fmt_parses_and_decodes() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn riff_size_zero_and_first_fmt_win() -> Result<()> {
+    let payload = [0u8, 1, 2, 3];
+    let mut file = riff(&le_pcm16_fmt(), &payload);
+    file[4..8].copy_from_slice(&0u32.to_le_bytes());
+    let d = crate::decode_bytes(&file, crate::DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 2);
+
+    let fmt16 = le_pcm16_fmt();
+    let mut fmt8k = le_pcm16_fmt();
+    fmt8k[4..8].copy_from_slice(&8_000u32.to_le_bytes());
+    let mut body = Vec::new();
+    for fmt in [&fmt16, &fmt8k] {
+        body.extend_from_slice(b"fmt ");
+        body.extend_from_slice(&(fmt.len() as u32).to_le_bytes());
+        body.extend_from_slice(fmt);
+    }
+    body.extend_from_slice(b"data");
+    body.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    body.extend_from_slice(&payload);
+    let mut two = Vec::new();
+    two.extend_from_slice(b"RIFF");
+    two.extend_from_slice(&(4 + body.len() as u32).to_le_bytes());
+    two.extend_from_slice(b"WAVE");
+    two.extend_from_slice(&body);
+    let h = parse_ok(&two)?;
+    assert_eq!(h.fmt.sample_rate, 16_000);
+    Ok(())
+}
+
 pub(super) fn riff(fmt: &[u8], data: &[u8]) -> Vec<u8> {
     riff_parts(fmt, None, data)
 }
