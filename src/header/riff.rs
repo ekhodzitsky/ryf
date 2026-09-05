@@ -72,6 +72,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     let mut fmt: Option<FmtFields> = None;
     let mut ds64_data_size: Option<u64> = None;
     let mut ds64_sample_count: Option<u64> = None;
+    let mut ds64_table: Vec<([u8; 4], u64)> = Vec::new();
     let mut fact_sample_count: Option<u64> = None;
     let mut saw_ds64 = false;
 
@@ -97,9 +98,16 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         let chunk_len_u32 = read_u32_endian(mss, be)?;
         consumed += 8;
 
-        // RF64: data/LIST chunk sizes may be 0xFFFFFFFF; real size is in ds64.
-        // (we only promote `data` via ds64.dataSize for product needs).
-        let chunk_len = u64::from(chunk_len_u32);
+        // RF64: data size 0xFFFFFFFF is ds64.dataSize. Other sentinels
+        // (JUNK/LIST/...) use the ds64 size table (EBU Tech 3306).
+        let mut chunk_len = u64::from(chunk_len_u32);
+        if chunk_len_u32 == u32::MAX && tag != *b"ds64" && tag != *b"data" && tag != *b"fmt " {
+            chunk_len = ds64_table
+                .iter()
+                .find(|(id, _)| id == &tag)
+                .map(|(_, sz)| *sz)
+                .ok_or_else(|| WavError::format(FormatKind::MalformedChunk))?;
+        }
 
         if let Some(len) = riff_data_len
             && len - consumed < chunk_len
@@ -107,9 +115,8 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         {
             return Err(WavError::format(FormatKind::MalformedChunk));
         }
-        // For 0xFFFFFFFF chunk sizes under RF64, do not advance consumed by
-        // the sentinel; we still skip using the real size after parse.
-        if chunk_len_u32 != u32::MAX {
+        // Sentinel `data`/`ds64` sizes are not added to consumed here.
+        if chunk_len_u32 != u32::MAX || (tag != *b"data" && tag != *b"ds64" && tag != *b"fmt ") {
             consumed = consumed.saturating_add(chunk_len);
         }
 
@@ -127,15 +134,18 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 let data_size = read_u64_le(mss)?;
                 let sample_count = read_u64_le(mss)?;
                 let table_len = mss.read_u32().map_err(eof_trunc)?;
-                // Skip optional size table (12 bytes per entry).
-                let table_bytes = u64::from(table_len).saturating_mul(12);
+                // tableLength entries of chunkId (4) + chunkSize (8).
                 let rest = chunk_len.saturating_sub(28);
-                let skip = table_bytes.min(rest);
-                if skip > 0 {
-                    mss.ignore_bytes(skip).map_err(eof_trunc)?;
+                let n_entries = table_len.min(32).min((rest / 12) as u32);
+                ds64_table.clear();
+                for _ in 0..n_entries {
+                    let id = mss.read_quad_bytes().map_err(eof_trunc)?;
+                    let sz = read_u64_le(mss)?;
+                    ds64_table.push((id, sz));
                 }
-                if rest > skip {
-                    mss.ignore_bytes(rest - skip).map_err(eof_trunc)?;
+                let read = u64::from(n_entries).saturating_mul(12);
+                if rest > read {
+                    mss.ignore_bytes(rest - read).map_err(eof_trunc)?;
                 }
                 // riffSize is the size of the RF64 chunk body after the first 8 bytes,
                 // i.e. same meaning as the RIFF chunk size field: data after the form is riffSize-4.
@@ -182,9 +192,6 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 if chunk_len < 4 {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
-                if chunk_len_u32 == u32::MAX {
-                    return Err(WavError::format(FormatKind::MalformedChunk));
-                }
                 mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
             }
             b"data" => {
@@ -209,9 +216,6 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 });
             }
             _ => {
-                if chunk_len_u32 == u32::MAX {
-                    return Err(WavError::format(FormatKind::MalformedChunk));
-                }
                 mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
             }
         }
@@ -294,7 +298,9 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             }
         } else if guid == W64_GUID_DATA {
             let fmt = fmt.ok_or_else(|| WavError::format(FormatKind::MissingChunk))?;
-            // Align: after data there may be padding to 8 bytes; we stop here.
+            // Sony/ffmpeg: size includes the 24-byte GUID+size header, not
+            // the 8-byte alignment pad after the payload. A writer that
+            // stuffed the pad into size makes those bytes PCM (ffmpeg too).
             return Ok(WavHeader {
                 fmt,
                 declared_data_len: Some(data_len),

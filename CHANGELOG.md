@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- RF64 `ds64` size table is applied to non-`data` chunks whose size is
+  `0xFFFFFFFF` (JUNK/LIST). `data` still uses `ds64.dataSize`. ffmpeg
+  does not read the table.
+- Wave64 `data` size is `chunk_size - 24` (Sony/ffmpeg). Alignment pad
+  after the payload is not PCM unless a writer put it inside `chunk_size`.
+
 ## [0.7.0] - 2026-09-05
 
 0.7 is the 1.0-prep line: public error/format/probe/write enums and

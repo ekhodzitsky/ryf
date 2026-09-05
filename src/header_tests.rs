@@ -201,3 +201,67 @@ fn channel_mask_expand_overflow_and_unfixable() {
     assert_eq!(fix_wave_channel_mask(0, 32), Some(u32::MAX));
     assert!(fix_wave_channel_mask(1u32 << 31, 3).is_none());
 }
+
+#[test]
+fn rf64_ds64_table_skips_junk_sentinel() -> Result<()> {
+    let fmt = le_pcm16_fmt();
+    let payload = [0u8, 1, 2, 3];
+    let junk = [9u8; 8];
+    let mut ds64 = Vec::new();
+    ds64.extend_from_slice(&200u64.to_le_bytes());
+    ds64.extend_from_slice(&(payload.len() as u64).to_le_bytes());
+    ds64.extend_from_slice(&2u64.to_le_bytes());
+    ds64.extend_from_slice(&1u32.to_le_bytes());
+    ds64.extend_from_slice(b"JUNK");
+    ds64.extend_from_slice(&(junk.len() as u64).to_le_bytes());
+    let mut file = b"RF64".to_vec();
+    file.extend_from_slice(&u32::MAX.to_le_bytes());
+    file.extend_from_slice(b"WAVE");
+    file.extend_from_slice(b"ds64");
+    file.extend_from_slice(&(ds64.len() as u32).to_le_bytes());
+    file.extend_from_slice(&ds64);
+    file.extend_from_slice(b"fmt ");
+    file.extend_from_slice(&(fmt.len() as u32).to_le_bytes());
+    file.extend_from_slice(&fmt);
+    file.extend_from_slice(b"JUNK");
+    file.extend_from_slice(&u32::MAX.to_le_bytes());
+    file.extend_from_slice(&junk);
+    file.extend_from_slice(b"data");
+    file.extend_from_slice(&u32::MAX.to_le_bytes());
+    file.extend_from_slice(&payload);
+    let h = parse_ok(&file)?;
+    assert_eq!(h.fmt.codec, SampleCodec::S16);
+    let d = crate::decode_bytes(&file, crate::DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 2);
+    Ok(())
+}
+
+#[test]
+fn w64_data_size_without_fact_matches_size_minus_24() -> Result<()> {
+    let payload = [10i16, -10, 20];
+    let mut pcm = Vec::new();
+    for &s in &payload {
+        pcm.extend_from_slice(&s.to_le_bytes());
+    }
+    let mut fmt = le_pcm16_fmt();
+    let pad = (8 - (pcm.len() % 8)) % 8;
+    let mut file = W64_GUID_RIFF.to_vec();
+    let size_pos = file.len();
+    file.extend_from_slice(&0u64.to_le_bytes());
+    file.extend_from_slice(&W64_GUID_WAVE);
+    let fmt_pad = (8 - (fmt.len() % 8)) % 8;
+    fmt.extend(std::iter::repeat_n(0u8, fmt_pad));
+    file.extend_from_slice(&W64_GUID_FMT);
+    file.extend_from_slice(&(24u64 + fmt.len() as u64).to_le_bytes());
+    file.extend_from_slice(&fmt);
+    // Size includes the 2-byte pad (Sony writers often do not; this one does).
+    file.extend_from_slice(&W64_GUID_DATA);
+    file.extend_from_slice(&(24u64 + pcm.len() as u64 + pad as u64).to_le_bytes());
+    file.extend_from_slice(&pcm);
+    file.extend(std::iter::repeat_n(0u8, pad));
+    let total = file.len() as u64;
+    file[size_pos..size_pos + 8].copy_from_slice(&total.to_le_bytes());
+    let d = crate::decode_bytes(&file, crate::DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 4); // 6 payload bytes + 2 pad zeros
+    Ok(())
+}
