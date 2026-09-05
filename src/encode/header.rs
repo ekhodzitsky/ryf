@@ -2,7 +2,10 @@
 
 use super::{WriteFormat, WriteSpec};
 use crate::error::{Result, WavError};
-use crate::header::{KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_PCM};
+use crate::header::{
+    KSDATAFORMAT_SUBTYPE_ALAW, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, KSDATAFORMAT_SUBTYPE_MULAW,
+    KSDATAFORMAT_SUBTYPE_PCM,
+};
 
 pub(super) const MAX_CHANNELS: u16 = 26;
 pub(super) const PCM_RIFF_PREFIX: u32 = 36;
@@ -200,42 +203,42 @@ fn push_fact_fmt_data(
 }
 
 fn subtype_guid(fmt: WriteFormat) -> [u8; 16] {
-    if fmt.is_float() {
-        KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
-    } else {
-        KSDATAFORMAT_SUBTYPE_PCM
+    match fmt {
+        WriteFormat::F32 => KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
+        WriteFormat::ALaw => KSDATAFORMAT_SUBTYPE_ALAW,
+        WriteFormat::MuLaw => KSDATAFORMAT_SUBTYPE_MULAW,
+        _ => KSDATAFORMAT_SUBTYPE_PCM,
     }
 }
 
-/// RIFF size minus 8 minus `data` payload (`60` PCM, `72` IEEE).
+fn speaker_mask(channels: u16) -> u32 {
+    if channels == 0 || channels > 18 {
+        0
+    } else {
+        (1u32 << channels) - 1
+    }
+}
+
+/// RIFF size minus 8 minus `data` payload (`60` PCM, `72` with `fact`).
 pub(super) fn extensible_riff_prefix(spec: WriteSpec) -> u32 {
-    if spec.format.is_float() { 72 } else { 60 }
+    if spec.format.has_fact() { 72 } else { 60 }
 }
 
 pub(super) fn extensible_data_len_pos(spec: WriteSpec) -> u64 {
-    if spec.format.is_float() { 76 } else { 64 }
+    if spec.format.has_fact() { 76 } else { 64 }
 }
 
 pub(super) fn extensible_fact_frames_pos(spec: WriteSpec) -> Option<u64> {
-    spec.format.is_float().then_some(68)
+    spec.format.has_fact().then_some(68)
 }
 
-/// RIFF `WAVEFORMATEXTENSIBLE` (40-byte `fmt `). PCM / IEEE only.
-pub(super) fn push_extensible_header(
+fn push_extensible_body(
     out: &mut Vec<u8>,
     spec: WriteSpec,
     data_len: u32,
+    fact_frames: u32,
 ) -> Result<()> {
-    if matches!(spec.format, WriteFormat::ALaw | WriteFormat::MuLaw) {
-        return Err(WavError::unsupported_codec(spec.format.tag()));
-    }
     let (block, byte_rate) = pcm_layout(spec)?;
-    let ch = spec.channels.min(18);
-    let mask = if ch == 0 { 0 } else { (1u32 << ch) - 1 };
-    let riff_len = riff_body_len(extensible_riff_prefix(spec), data_len)?;
-    out.extend_from_slice(b"RIFF");
-    out.extend_from_slice(&riff_len.to_le_bytes());
-    out.extend_from_slice(b"WAVE");
     out.extend_from_slice(b"fmt ");
     out.extend_from_slice(&40u32.to_le_bytes());
     out.extend_from_slice(&0xFFFEu16.to_le_bytes());
@@ -246,17 +249,62 @@ pub(super) fn push_extensible_header(
     out.extend_from_slice(&spec.format.bits().to_le_bytes());
     out.extend_from_slice(&22u16.to_le_bytes());
     out.extend_from_slice(&spec.format.bits().to_le_bytes());
-    out.extend_from_slice(&mask.to_le_bytes());
+    out.extend_from_slice(&speaker_mask(spec.channels).to_le_bytes());
     out.extend_from_slice(&subtype_guid(spec.format));
-    if spec.format.is_float() {
-        let frames = data_len.checked_div(u32::from(block).max(1)).unwrap_or(0);
+    if spec.format.has_fact() {
         out.extend_from_slice(b"fact");
         out.extend_from_slice(&4u32.to_le_bytes());
-        out.extend_from_slice(&frames.to_le_bytes());
+        out.extend_from_slice(&fact_frames.to_le_bytes());
     }
     out.extend_from_slice(b"data");
     out.extend_from_slice(&data_len.to_le_bytes());
     Ok(())
+}
+
+/// RIFF `WAVEFORMATEXTENSIBLE` (40-byte `fmt `). PCM / IEEE / G.711.
+pub(super) fn push_extensible_header(
+    out: &mut Vec<u8>,
+    spec: WriteSpec,
+    data_len: u32,
+) -> Result<()> {
+    let (block, _) = pcm_layout(spec)?;
+    let frames = data_len.checked_div(u32::from(block).max(1)).unwrap_or(0);
+    let riff_len = riff_body_len(extensible_riff_prefix(spec), data_len)?;
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&riff_len.to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    push_extensible_body(out, spec, data_len, frames)
+}
+
+pub(super) fn rf64_extensible_header_len(spec: WriteSpec) -> u64 {
+    if spec.format.has_fact() { 116 } else { 104 }
+}
+
+pub(super) fn needs_rf64_extensible(spec: WriteSpec, data_len: u64) -> bool {
+    u64::from(extensible_riff_prefix(spec)).saturating_add(padded_data_len(data_len))
+        > u64::from(u32::MAX)
+}
+
+/// RF64 + `WAVEFORMATEXTENSIBLE`.
+pub(super) fn push_rf64_extensible_header(
+    out: &mut Vec<u8>,
+    spec: WriteSpec,
+    data_len: u64,
+    frames: u64,
+) -> Result<()> {
+    let header_len = rf64_extensible_header_len(spec);
+    let file_len = header_len.saturating_add(padded_data_len(data_len));
+    let riff_size = file_len.saturating_sub(8);
+    out.extend_from_slice(b"RF64");
+    out.extend_from_slice(&u32::MAX.to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    out.extend_from_slice(b"ds64");
+    out.extend_from_slice(&28u32.to_le_bytes());
+    out.extend_from_slice(&riff_size.to_le_bytes());
+    out.extend_from_slice(&data_len.to_le_bytes());
+    out.extend_from_slice(&frames.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    push_extensible_body(out, spec, u32::MAX, frames.min(u64::from(u32::MAX)) as u32)
 }
 
 /// Reverse each sample container (LE payload to RIFX data bytes). Width 1 is a copy.

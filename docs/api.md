@@ -50,7 +50,7 @@ Typed `WavError`. No `anyhow`, no `thiserror`.
 | `Io` | `Read` / `Seek` / `Write` |
 | `NotWave` | not a WAVE container |
 | `UnsupportedCodec { tag }` | codec / subtype not implemented (`tag` is `wFormatTag`, or `0`) |
-| `Format(FormatKind)` | broken chunk walk (closed set, no `String`) |
+| `Format(FormatKind)` | broken chunk walk (typed, `non_exhaustive`) |
 | `UnsupportedSampleRate` | rate 0 or above the configured ceiling |
 | `TooLong` | actual PCM longer than `max_duration_secs` |
 | `OutputTooLarge` | planar f32 would exceed `max_output_bytes` |
@@ -62,6 +62,15 @@ Typed `WavError`. No `anyhow`, no `thiserror`.
 
 `FormatKind`: Truncated, MalformedFmt, MalformedChunk, MissingChunk,
 ChannelLayout, InvalidSize, UnsupportedWaveFormat, Adpcm, InvalidOperation.
+The enum is `non_exhaustive`.
 
 `is_format_class()` is the NotWave / Format / StreamLengthUnknown / OddPcm /
 Empty bucket for higher layers.
+
+## Versioning
+
+0.7 is the 1.0-prep line. `WavError`, `FormatKind`, `WriteFormat`,
+`ProbeCodec`, and public option/result structs are `non_exhaustive` so 1.0
+can add variants or fields. `ChannelMode` and `G711Law` stay closed.
+`ByteSource` is exported at the crate root; the `source` module is
+crate-private. Construct `DecodeOptions` / `WriteSpec` with the builders.

@@ -79,6 +79,7 @@ fn need_duration_check(total_frames: usize, max_samples: usize) -> bool {
 
 /// Metadata returned by [`decode_streaming`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct StreamInfo {
     pub sample_rate: u32,
     /// 1 if mixed ([`ChannelMode::Mono`]); otherwise the source channel count.
@@ -94,6 +95,7 @@ pub struct StreamInfo {
 ///
 /// Slices are valid only for the duration of the callback.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct StreamBlock<'a> {
     pub sample_rate: u32,
     pub frames: usize,

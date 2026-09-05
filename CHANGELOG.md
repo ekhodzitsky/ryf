@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-05
+
+0.7 is the 1.0-prep line: public error/format/probe/write enums and
+option/result structs are `non_exhaustive`. `ChannelMode` and `G711Law`
+stay closed.
+
+### Added
+
+- `WAVEFORMATEXTENSIBLE` G.711 A-law / mu-law write (`encode_extensible` /
+  `WavWriter::new_extensible`).
+- `encode_extensible` uses RF64 when classic RIFF sizes overflow `u32`.
+
+### Changed
+
+- `WavError`, `FormatKind`, `WriteFormat`, `ProbeCodec`, `DecodeOptions`,
+  `WriteSpec`, `DecodedWav`, `WavProbe`, `StreamInfo`, and `StreamBlock`
+  are `non_exhaustive`.
+- The `source` module is crate-private. Use `ryf::ByteSource`. Demux
+  helpers (`read_u16`, `ignore_bytes`, ...) are `pub(crate)`.
+  `ByteSource::new` is removed; use `from_read_seek`.
+- `ByteSource::from_read_seek` rewinds to 0 (same as `from_file`). `None`
+  length is filled from seek-end when that works.
+- `read_s16` / `read_f32` take `impl AsRef<Path>`.
+- Extensible speaker mask for 19-26 channels is 0 (unspecified), not a
+  truncated 18-bit mask.
+
 ### Fixed
 
 - MS-ADPCM adaptive delta is clamped to `16..=32767`. A large step times
@@ -68,6 +94,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   12 is 1 frame, not 5).
 - `ByteSource::from_file`: if rewind to 0 fails, `pos` follows the real
   cursor instead of claiming 0.
+
+### Breaking
+
+- Exhaustive `match` on `WavError` / `FormatKind` / `WriteFormat` /
+  `ProbeCodec` needs `_`.
+- Struct literals for `DecodeOptions` / `WriteSpec` from outside this
+  crate are invalid; use the builders.
+- `ryf::source` and `ByteSource::new` are gone.
 
 ## [0.6.0] - 2026-09-04
 
@@ -301,7 +335,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`header`, `convert`, `pull`, `adpcm`, `wav_tests`). Decode behavior is
   unchanged. README layout lists the split directories.
 
-[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/ekhodzitsky/ryf/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ekhodzitsky/ryf/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ekhodzitsky/ryf/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/ekhodzitsky/ryf/compare/v0.4.1...v0.5.0

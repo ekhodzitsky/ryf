@@ -67,9 +67,8 @@ pub(crate) const W64_GUID_FACT: [u8; 16] = [
     0x8C, 0xD1, 0x00, 0xC0, 0x4F, 0x8E, 0xDB, 0x8A,
 ];
 /// Codec identity from a WAVE `fmt ` chunk (no PCM decoded).
-///
-/// Adding a variant is a breaking change (the enum is exhaustive).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ProbeCodec {
     /// PCM unsigned 8-bit.
     PcmU8,

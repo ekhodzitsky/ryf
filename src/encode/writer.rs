@@ -51,7 +51,7 @@ impl WavWriter<File> {
         Self::new_rifx(File::create(path)?, spec)
     }
 
-    /// Create `path` as `WAVEFORMATEXTENSIBLE` (PCM / IEEE).
+    /// Create `path` as `WAVEFORMATEXTENSIBLE` (PCM / IEEE / G.711).
     pub fn create_extensible(path: &Path, spec: WriteSpec) -> Result<Self> {
         Self::new_extensible(File::create(path)?, spec)
     }
@@ -108,7 +108,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         })
     }
 
-    /// Write a `WAVEFORMATEXTENSIBLE` header (PCM / IEEE).
+    /// Write a `WAVEFORMATEXTENSIBLE` header (PCM / IEEE / G.711).
     pub fn new_extensible(mut inner: W, spec: WriteSpec) -> Result<Self> {
         validate_spec(spec)?;
         let mut header = Vec::with_capacity(80);

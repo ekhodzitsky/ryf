@@ -17,14 +17,15 @@ native sample rate.
 - Encode is PCM U8/S16/S24/S32 + IEEE f32 + G.711 A-law/mu-law, 1-26 ch:
   classic RIFF when it fits, RF64 when it does not (`encode_rf64` /
   `WavWriter::new_rf64` to force). RIFX: `encode_rifx` /
-  `WavWriter::new_rifx`. `WAVEFORMATEXTENSIBLE` PCM/IEEE:
-  `encode_extensible` / `WavWriter::new_extensible`. Mono PCM16 helper
-  `encode_s16` / `write_s16`; `encode_f32`; `encode_alaw` / `encode_mulaw`.
-  No ADPCM / G.722 / GSM encode.
+  `WavWriter::new_rifx`. `WAVEFORMATEXTENSIBLE` PCM/IEEE/G.711:
+  `encode_extensible` / `WavWriter::new_extensible` (RF64 when sizes
+  overflow). Mono PCM16 helper `encode_s16` / `write_s16`; `encode_f32`;
+  `encode_alaw` / `encode_mulaw`. No ADPCM / G.722 / GSM encode.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in
   `convert/simd.rs` (each `unsafe` has a SAFETY comment).
 - Crate name is `ryf`. Not a family prefix. Published on crates.io
-  (`ryf = "0.6"`). No slogan.
+  (`ryf = "0.7"`). No slogan. 0.7 is the 1.0-prep line (`non_exhaustive`
+  public enums/structs; `source` is crate-private).
 
 ## How it runs
 

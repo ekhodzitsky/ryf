@@ -13,13 +13,15 @@ mod header;
 mod writer;
 
 use header::{
-    extensible_riff_prefix, frame_bytes, needs_rf64, padded_data_len, push_extensible_header,
-    push_header, push_rf64_header, push_rifx_header, swap_sample_bytes, u32_len, validate_spec,
+    frame_bytes, needs_rf64, needs_rf64_extensible, push_extensible_header, push_header,
+    push_rf64_extensible_header, push_rf64_header, push_rifx_header, swap_sample_bytes, u32_len,
+    validate_spec,
 };
 pub use writer::WavWriter;
 
 /// Sample format written into a WAVE `data` chunk (RIFF, RF64, or RIFX).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WriteFormat {
     /// Unsigned 8-bit PCM.
     U8,
@@ -85,6 +87,7 @@ impl WriteFormat {
 
 /// WAVE write parameters (RIFF, or RF64 when sizes overflow).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct WriteSpec {
     pub sample_rate: u32,
     /// 1..=26 (same ceiling as decode).
@@ -298,12 +301,16 @@ pub fn encode_rifx(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Encode with `WAVEFORMATEXTENSIBLE` (`fmt ` size 40).
+/// PCM / IEEE / G.711. Classic RIFF when sizes fit; RF64 otherwise.
 pub fn encode_extensible(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
-    let _fb = prepared(spec, pcm)?;
-    if u64::from(extensible_riff_prefix(spec)).saturating_add(padded_data_len(pcm.len() as u64))
-        > u64::from(u32::MAX)
-    {
-        return Err(WavError::RiffTooLarge);
+    let fb = prepared(spec, pcm)?;
+    let data_len = pcm.len() as u64;
+    if needs_rf64_extensible(spec, data_len) {
+        let frames = data_len / fb as u64;
+        let mut out = Vec::with_capacity(116usize.saturating_add(pcm.len()));
+        push_rf64_extensible_header(&mut out, spec, data_len, frames)?;
+        append_payload(&mut out, pcm);
+        return Ok(out);
     }
     let data_len = u32_len(pcm.len())?;
     let mut out = Vec::with_capacity(80usize.saturating_add(pcm.len()));

@@ -21,6 +21,7 @@ pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 /// `channels` holds exactly one mixed track in [`ChannelMode::Mono`], or one
 /// track per channel in [`ChannelMode::Split`] (all of equal length).
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct DecodedWav {
     /// Native PCM rate (Hz). G.722 is always 16 kHz, even if `fmt ` differs.
     /// GSM keeps the `fmt ` rate (8 kHz on wav49).
@@ -45,6 +46,7 @@ impl DecodedWav {
 
 /// Lightweight header probe without decoding PCM.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct WavProbe {
     /// Native PCM rate (Hz). G.722 is always 16 kHz; GSM keeps `fmt `.
     pub sample_rate: u32,
@@ -318,13 +320,13 @@ pub fn read_with(path: impl AsRef<Path>, opts: &DecodeOptions) -> Result<Decoded
 }
 
 /// [`decode_s16`] from a filesystem path.
-pub fn read_s16(path: &Path) -> Result<(u32, Vec<u8>)> {
+pub fn read_s16(path: impl AsRef<Path>) -> Result<(u32, Vec<u8>)> {
     let file = std::fs::File::open(path)?;
     decode_s16_from(&mut ByteSource::from_file(file))
 }
 
 /// [`decode_f32`] from a filesystem path.
-pub fn read_f32(path: &Path) -> Result<(u32, Vec<f32>)> {
+pub fn read_f32(path: impl AsRef<Path>) -> Result<(u32, Vec<f32>)> {
     decode_f32(&std::fs::read(path)?)
 }
 

@@ -36,7 +36,7 @@ pub(crate) mod header;
 mod options;
 mod pull;
 mod scrub;
-pub mod source;
+mod source;
 mod wav;
 
 pub use convert::{f32_to_s16le, s16le_to_f32};
@@ -73,7 +73,8 @@ pub enum ChannelMode {
     Split,
 }
 
-/// Maximum decoded frames for `sample_rate` under [`DecodeOptions::speech`].
+/// Maximum decoded frames for `sample_rate` under [`DecodeOptions::speech`]
+/// (2 h, frame-budget rate 48 kHz).
 #[inline]
 pub fn max_decode_samples(sample_rate: u32) -> usize {
     DecodeOptions::speech().max_frames(sample_rate)

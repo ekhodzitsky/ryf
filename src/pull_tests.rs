@@ -256,3 +256,47 @@ fn ms_adpcm_file() -> Vec<u8> {
     file.extend_from_slice(&body);
     file
 }
+
+#[test]
+fn seek_without_end_is_stream_length_unknown() {
+    use std::io::{Read, Seek, SeekFrom};
+    struct NoEnd {
+        data: Vec<u8>,
+        pos: u64,
+    }
+    impl Read for NoEnd {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let p = self.pos as usize;
+            if p >= self.data.len() {
+                return Ok(0);
+            }
+            let n = (self.data.len() - p).min(buf.len());
+            buf[..n].copy_from_slice(&self.data[p..p + n]);
+            self.pos += n as u64;
+            Ok(n)
+        }
+    }
+    impl Seek for NoEnd {
+        fn seek(&mut self, from: SeekFrom) -> std::io::Result<u64> {
+            match from {
+                SeekFrom::End(_) => Err(std::io::Error::other("no end")),
+                SeekFrom::Start(p) => {
+                    self.pos = p;
+                    Ok(p)
+                }
+                SeekFrom::Current(d) => {
+                    self.pos = if d >= 0 {
+                        self.pos.saturating_add(d as u64)
+                    } else {
+                        self.pos.saturating_sub(d.unsigned_abs())
+                    };
+                    Ok(self.pos)
+                }
+            }
+        }
+    }
+    let wav = riff_pcm(1, 16_000, 1, 16, &[0u8, 0, 0, 0]);
+    let mut src = ByteSource::from_read_seek(NoEnd { data: wav, pos: 0 }, None);
+    let err = crate::decode_with(&mut src, &DecodeOptions::default()).unwrap_err();
+    assert!(matches!(err, crate::WavError::StreamLengthUnknown), "{err}");
+}

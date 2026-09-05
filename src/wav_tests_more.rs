@@ -445,7 +445,7 @@ fn test_output_too_large_mono() {
 }
 
 #[test]
-fn test_stream_length_unknown() {
+fn test_from_read_seek_none_discovers_length() {
     use std::io::Cursor;
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(9), 16, 1);
     let wav = WavBuilder {
@@ -454,8 +454,8 @@ fn test_stream_length_unknown() {
     }
     .build();
     let mut src = ByteSource::from_read_seek(Cursor::new(wav), None);
-    let err = crate::decode(&mut src, ChannelMode::Mono, "nolength").unwrap_err();
-    assert!(matches!(err, crate::WavError::StreamLengthUnknown), "{err}");
+    let d = crate::decode(&mut src, ChannelMode::Mono, "cursor").unwrap();
+    assert_eq!(d.frames(), 16);
 }
 
 #[test]

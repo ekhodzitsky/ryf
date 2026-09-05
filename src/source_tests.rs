@@ -88,11 +88,16 @@ fn byte_source_is_send() {
 fn from_read_seek_and_new() -> Result<()> {
     use std::io::Cursor;
     let data = [9u8, 8, 7, 6];
-    let mut s = ByteSource::from_read_seek(Cursor::new(data), Some(4));
+    let mut cur = Cursor::new(data);
+    cur.seek(SeekFrom::End(0))?;
+    let mut s = ByteSource::from_read_seek(cur, Some(4));
+    assert_eq!(s.pos(), 0);
     assert!(s.contiguous_slice().is_none());
     assert_eq!(s.read_u16()?, u16::from_le_bytes([9, 8]));
     s.seek(SeekFrom::Start(0))?;
-    let mut boxed: ByteSource = ByteSource::new(Box::new(Cursor::new(data.to_vec())), Some(4));
+    let mut boxed = ByteSource::from_read_seek(Cursor::new(data.to_vec()), None);
+    assert_eq!(boxed.byte_len(), Some(4));
+    assert_eq!(boxed.pos(), 0);
     assert_eq!(boxed.read_u8()?, 9);
     Ok(())
 }

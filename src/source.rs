@@ -18,8 +18,8 @@ impl Seek for DeadInner {
     }
 }
 
-/// Object-safe `Read + Seek + Send` (0.3 library contract).
-pub trait ReadSeek: Read + Seek + Send {}
+/// Object-safe `Read + Seek + Send`.
+pub(crate) trait ReadSeek: Read + Seek + Send {}
 impl<T: Read + Seek + Send> ReadSeek for T {}
 
 /// Contiguous memory view for zero-copy handoff (WAVE PCM, adapters).
@@ -52,18 +52,25 @@ pub struct ByteSource<'a> {
     memory: Contiguous<'a>,
 }
 
-impl<'a> ByteSource<'a> {
-    /// Wrap an already-boxed `Read + Seek + Send`. Prefer [`from_slice`],
-    /// [`from_file`], or [`from_read_seek`].
-    pub fn new(inner: Box<dyn ReadSeek + 'a>, byte_len: Option<u64>) -> Self {
-        Self {
-            inner,
-            pos: 0,
-            byte_len,
-            memory: Contiguous::None,
-        }
+fn wrap_seekable<'b, R>(mut inner: R, byte_len: Option<u64>) -> ByteSource<'b>
+where
+    R: Read + Seek + Send + 'b,
+{
+    let byte_len = match byte_len {
+        Some(n) => Some(n),
+        None => inner.seek(SeekFrom::End(0)).ok(),
+    };
+    let _ = inner.seek(SeekFrom::Start(0));
+    let pos = inner.stream_position().unwrap_or(0);
+    ByteSource {
+        inner: Box::new(inner),
+        pos,
+        byte_len,
+        memory: Contiguous::None,
     }
+}
 
+impl<'a> ByteSource<'a> {
     /// Borrowed in-memory buffer (zero-copy; no heap clone of `data`).
     pub fn from_slice(data: &'a [u8]) -> ByteSource<'a> {
         let len = data.len() as u64;
@@ -90,33 +97,17 @@ impl<'a> ByteSource<'a> {
     /// Local file, streamed. Rewinds to 0 when the handle allows it;
     /// `pos` always follows the real cursor.
     pub fn from_file(file: std::fs::File) -> ByteSource<'static> {
-        let mut file = file;
-        let len = file
-            .metadata()
-            .ok()
-            .map(|m| m.len())
-            .or_else(|| file.seek(SeekFrom::End(0)).ok());
-        let _ = file.seek(SeekFrom::Start(0));
-        let pos = file.stream_position().unwrap_or(0);
-        ByteSource {
-            inner: Box::new(file),
-            pos,
-            byte_len: len,
-            memory: Contiguous::None,
-        }
+        let meta_len = file.metadata().ok().map(|m| m.len());
+        wrap_seekable(file, meta_len)
     }
 
-    /// Arbitrary `Read + Seek + Send` with optional known length.
+    /// Arbitrary `Read + Seek + Send`. Rewinds to 0. `None` length is filled
+    /// from seek-end when that works.
     pub fn from_read_seek<'b, R>(inner: R, byte_len: Option<u64>) -> ByteSource<'b>
     where
         R: Read + Seek + Send + 'b,
     {
-        ByteSource {
-            inner: Box::new(inner),
-            pos: 0,
-            byte_len,
-            memory: Contiguous::None,
-        }
+        wrap_seekable(inner, byte_len)
     }
 
     #[inline]
@@ -146,54 +137,57 @@ impl<'a> ByteSource<'a> {
         Some(&data[pos..])
     }
 
-    pub fn read_buf_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+    pub(crate) fn read_buf_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
         self.read_exact(buf)
     }
 
-    pub fn read_quad_bytes(&mut self) -> io::Result<[u8; 4]> {
+    pub(crate) fn read_quad_bytes(&mut self) -> io::Result<[u8; 4]> {
         let mut buf = [0u8; 4];
         self.read_exact(&mut buf)?;
         Ok(buf)
     }
 
-    pub fn read_u8(&mut self) -> io::Result<u8> {
+    pub(crate) fn read_u8(&mut self) -> io::Result<u8> {
         let mut buf = [0u8; 1];
         self.read_exact(&mut buf)?;
         Ok(buf[0])
     }
 
-    pub fn read_u16(&mut self) -> io::Result<u16> {
+    #[cfg(test)]
+    pub(crate) fn read_u16(&mut self) -> io::Result<u16> {
         let mut buf = [0u8; 2];
         self.read_exact(&mut buf)?;
         Ok(u16::from_le_bytes(buf))
     }
 
-    pub fn read_be_u16(&mut self) -> io::Result<u16> {
+    #[cfg(test)]
+    pub(crate) fn read_be_u16(&mut self) -> io::Result<u16> {
         let mut buf = [0u8; 2];
         self.read_exact(&mut buf)?;
         Ok(u16::from_be_bytes(buf))
     }
 
-    pub fn read_u32(&mut self) -> io::Result<u32> {
+    pub(crate) fn read_u32(&mut self) -> io::Result<u32> {
         let mut buf = [0u8; 4];
         self.read_exact(&mut buf)?;
         Ok(u32::from_le_bytes(buf))
     }
 
-    pub fn read_be_u32(&mut self) -> io::Result<u32> {
+    #[cfg(test)]
+    pub(crate) fn read_be_u32(&mut self) -> io::Result<u32> {
         let mut buf = [0u8; 4];
         self.read_exact(&mut buf)?;
         Ok(u32::from_be_bytes(buf))
     }
 
     /// Move the cursor forward by `n` bytes without going through `i64`.
-    pub fn advance(&mut self, n: u64) -> io::Result<()> {
+    pub(crate) fn advance(&mut self, n: u64) -> io::Result<()> {
         let pos = self.pos.saturating_add(n);
         self.seek(SeekFrom::Start(pos)).map(|_| ())
     }
 
     /// Skip `count` bytes (seek when large; else read-discard).
-    pub fn ignore_bytes(&mut self, count: u64) -> io::Result<()> {
+    pub(crate) fn ignore_bytes(&mut self, count: u64) -> io::Result<()> {
         if count == 0 {
             return Ok(());
         }

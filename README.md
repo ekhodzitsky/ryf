@@ -101,7 +101,7 @@ is a **tie** with dr_wav. Numbers: [benchmarks](docs/benchmarks.md).
 
 ```toml
 [dependencies]
-ryf = "0.6"
+ryf = "0.7"
 ```
 
 rustc **1.88**. Default features (`adpcm` + `simd`) pull **no crates**.

@@ -1,4 +1,4 @@
-use super::header::push_extensible_header;
+use super::header::{push_extensible_header, push_rf64_extensible_header};
 use super::{WavWriter, WriteSpec, encode_extensible, encode_rifx};
 use crate::convert::f32_to_s16le;
 use crate::error::{Result, WavError};
@@ -38,20 +38,22 @@ fn encode_rifx_f32_s24_alaw_roundtrips() -> Result<()> {
 }
 
 #[test]
-fn encode_extensible_rejects_g711_and_overflow() -> Result<()> {
-    assert!(matches!(
-        encode_extensible(WriteSpec::alaw(8_000, 1), &[0u8; 4]),
-        Err(WavError::UnsupportedCodec { tag: 6 })
-    ));
-    assert!(matches!(
-        encode_extensible(WriteSpec::mulaw(8_000, 1), &[0u8; 4]),
-        Err(WavError::UnsupportedCodec { tag: 7 })
-    ));
+fn encode_extensible_g711_roundtrips_and_overflow() -> Result<()> {
+    let wav = encode_extensible(WriteSpec::alaw(8_000, 1), &[0xd5, 0x55])?;
+    assert_eq!(&wav[20..22], &0xFFFEu16.to_le_bytes());
+    assert!(wav.windows(4).any(|w| w == b"fact"));
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 2);
+    let mu = encode_extensible(WriteSpec::mulaw(8_000, 1), &[0xff, 0x7f])?;
+    assert_eq!(decode_bytes(&mu, DecodeOptions::unbounded())?.frames(), 2);
     let mut hdr = Vec::new();
     assert!(matches!(
         push_extensible_header(&mut hdr, WriteSpec::s16(16_000, 1), u32::MAX - 50),
         Err(WavError::RiffTooLarge)
     ));
+    let mut rf = Vec::new();
+    push_rf64_extensible_header(&mut rf, WriteSpec::s16(16_000, 1), 1u64 << 40, 1u64 << 39)?;
+    assert_eq!(&rf[..4], b"RF64");
     Ok(())
 }
 

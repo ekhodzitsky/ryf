@@ -9,6 +9,7 @@ pub type Result<T> = std::result::Result<T, WavError>;
 
 /// Structural failure inside a WAVE container (the bytes started as WAVE).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FormatKind {
     /// Short read while walking a chunk.
     Truncated,
@@ -48,6 +49,7 @@ impl fmt::Display for FormatKind {
 
 /// Errors produced while sniffing, probing, decoding, or encoding WAVE.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum WavError {
     /// Underlying `Read` / `Seek` / `Write` failure.
     Io(io::Error),

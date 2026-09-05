@@ -16,6 +16,7 @@ pub const DEFAULT_MAX_OUTPUT_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 /// Options for [`crate::decode_with`] / [`crate::probe_with`].
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct DecodeOptions {
     pub channel_mode: ChannelMode,
     /// Hard upper bound on decoded audio length (seconds).
