@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- WAVE `data` before `fmt ` is accepted (ffmpeg). The first `data` chunk
+  still wins.
+
 ## [0.7.1] - 2026-09-05
 
 ### Fixed

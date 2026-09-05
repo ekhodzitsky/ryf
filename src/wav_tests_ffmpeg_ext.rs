@@ -419,6 +419,26 @@ fn test_diff_g711_fmt_len_16_accepted() -> Result<()> {
 }
 
 #[test]
+fn test_diff_data_before_fmt_pcm() -> Result<()> {
+    let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(11), 64, 1);
+    let fmt = WavBuilder::new(TestCodec::S16).fmt_body();
+    let mut body = Vec::new();
+    body.extend_from_slice(b"data");
+    body.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    body.extend_from_slice(&payload);
+    body.extend_from_slice(b"fmt ");
+    body.extend_from_slice(&(fmt.len() as u32).to_le_bytes());
+    body.extend_from_slice(&fmt);
+    let mut file = Vec::new();
+    file.extend_from_slice(b"RIFF");
+    file.extend_from_slice(&(4 + body.len() as u32).to_le_bytes());
+    file.extend_from_slice(b"WAVE");
+    file.extend_from_slice(&body);
+    assert_bit_exact_both_modes("data before fmt", &file);
+    Ok(())
+}
+
+#[test]
 fn test_diff_data_before_fmt_rejected() {
     let mut body = Vec::new();
     body.extend_from_slice(b"data");

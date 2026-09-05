@@ -18,9 +18,9 @@ Also:
   Numeric `fmt ` fields follow the container endian. SubFormat GUID is
   always the Microsoft on-disk 16 bytes (including RIFX).
 - Wild headers: `valid_bits = 0`, empty channel mask, short `data`,
-  streaming `u32::MAX` sizes, `fmt ` surplus after the 16-byte core
-  (PCM 20, Wave64 pad, IEEE 17/18 with wild `cbSize`, IMA extra longer
-  than 2, extensible `cbSize` longer than 22)
+  `data` before `fmt `, streaming `u32::MAX` sizes, `fmt ` surplus after
+  the 16-byte core (PCM 20, Wave64 pad, IEEE 17/18 with wild `cbSize`,
+  IMA extra longer than 2, extensible `cbSize` longer than 22)
 - `TooLong` is decided from **bytes on disk**, not a lying `fact` / `ds64`
 - RF64 `ds64` size table (EBU Tech 3306) sizes non-`data` `0xFFFFFFFF`
   chunks. Wave64 `data` length is `chunk_size - 24`; pad bytes stuffed

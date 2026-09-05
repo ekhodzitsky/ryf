@@ -17,6 +17,24 @@ pub(super) fn eof_trunc(err: io::Error) -> WavError {
     }
 }
 
+fn wav_header(
+    mss: &mut ByteSource<'_>,
+    fmt: FmtFields,
+    data_pos: u64,
+    declared_data_len: Option<u64>,
+    declared_sample_count: Option<u64>,
+) -> Result<WavHeader> {
+    if mss.pos() != data_pos {
+        mss.seek(SeekFrom::Start(data_pos)).map_err(eof_trunc)?;
+    }
+    Ok(WavHeader {
+        fmt,
+        declared_data_len,
+        data_pos,
+        declared_sample_count,
+    })
+}
+
 pub(crate) fn parse_header(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     parse_header_inner(mss)
 }
@@ -75,6 +93,8 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     let mut ds64_table: Vec<([u8; 4], u64)> = Vec::new();
     let mut fact_sample_count: Option<u64> = None;
     let mut saw_ds64 = false;
+    // First `data` payload when it appears before `fmt `.
+    let mut pending_data: Option<(u64, Option<u64>)> = None;
 
     loop {
         if let Some(len) = riff_data_len
@@ -94,7 +114,17 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             break;
         }
 
-        let tag = mss.read_quad_bytes().map_err(eof_trunc)?;
+        let tag = match mss.read_quad_bytes() {
+            Ok(t) => t,
+            Err(e)
+                if e.kind() == io::ErrorKind::UnexpectedEof
+                    && fmt.is_some()
+                    && pending_data.is_some() =>
+            {
+                break;
+            }
+            Err(e) => return Err(eof_trunc(e)),
+        };
         let chunk_len_u32 = read_u32_endian(mss, be)?;
         consumed += 8;
 
@@ -195,25 +225,36 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
             }
             b"data" => {
-                let fmt = match fmt {
-                    Some(fmt) => fmt,
-                    None => return Err(WavError::format(FormatKind::MissingChunk)),
-                };
-                if is_rf64 && !saw_ds64 {
-                    return Err(WavError::format(FormatKind::MissingChunk));
-                }
                 let declared = if chunk_len_u32 == u32::MAX {
                     ds64_data_size
                 } else {
                     Some(chunk_len)
                 };
-                let sample_count = ds64_sample_count.or(fact_sample_count);
-                return Ok(WavHeader {
-                    fmt,
-                    declared_data_len: declared,
-                    data_pos: mss.pos(),
-                    declared_sample_count: sample_count,
-                });
+                // Canonical order: return on the first `data` after `fmt `.
+                if pending_data.is_none()
+                    && let Some(f) = fmt.take()
+                {
+                    if is_rf64 && !saw_ds64 {
+                        return Err(WavError::format(FormatKind::MissingChunk));
+                    }
+                    return wav_header(
+                        mss,
+                        f,
+                        mss.pos(),
+                        declared,
+                        ds64_sample_count.or(fact_sample_count),
+                    );
+                }
+                // `data` before `fmt `, or a later `data` after a pending first
+                // chunk: skip a known size so the walk can reach `fmt `.
+                // Sentinel RF64 `data` (0xFFFFFFFF) cannot be skipped.
+                if chunk_len_u32 == u32::MAX {
+                    return Err(WavError::format(FormatKind::MissingChunk));
+                }
+                if pending_data.is_none() {
+                    pending_data = Some((mss.pos(), declared));
+                }
+                mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
             }
             _ => {
                 mss.ignore_bytes(chunk_len).map_err(eof_trunc)?;
@@ -221,7 +262,21 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         }
     }
 
-    Err(WavError::format(FormatKind::MissingChunk))
+    match (fmt, pending_data) {
+        (Some(f), Some((pos, declared))) => {
+            if is_rf64 && !saw_ds64 {
+                return Err(WavError::format(FormatKind::MissingChunk));
+            }
+            wav_header(
+                mss,
+                f,
+                pos,
+                declared,
+                ds64_sample_count.or(fact_sample_count),
+            )
+        }
+        _ => Err(WavError::format(FormatKind::MissingChunk)),
+    }
 }
 
 pub(super) fn read_u64_le(mss: &mut ByteSource<'_>) -> Result<u64> {
@@ -262,6 +317,7 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
 
     let mut fmt: Option<FmtFields> = None;
     let mut fact_sample_count: Option<u64> = None;
+    let mut pending_data: Option<(u64, u64)> = None;
 
     loop {
         let mut guid = [0u8; 16];
@@ -297,16 +353,18 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 mss.ignore_bytes(data_len - 4).map_err(eof_trunc)?;
             }
         } else if guid == W64_GUID_DATA {
-            let fmt = fmt.ok_or_else(|| WavError::format(FormatKind::MissingChunk))?;
             // Sony/ffmpeg: size includes the 24-byte GUID+size header, not
             // the 8-byte alignment pad after the payload. A writer that
             // stuffed the pad into size makes those bytes PCM (ffmpeg too).
-            return Ok(WavHeader {
-                fmt,
-                declared_data_len: Some(data_len),
-                data_pos: mss.pos(),
-                declared_sample_count: fact_sample_count,
-            });
+            if pending_data.is_none()
+                && let Some(f) = fmt.take()
+            {
+                return wav_header(mss, f, mss.pos(), Some(data_len), fact_sample_count);
+            }
+            if pending_data.is_none() {
+                pending_data = Some((mss.pos(), data_len));
+            }
+            mss.ignore_bytes(data_len).map_err(eof_trunc)?;
         } else {
             mss.ignore_bytes(data_len).map_err(eof_trunc)?;
         }
@@ -317,5 +375,10 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             mss.ignore_bytes(pad).map_err(eof_trunc)?;
         }
     }
-    Err(WavError::format(FormatKind::MissingChunk))
+    match (fmt, pending_data) {
+        (Some(f), Some((pos, data_len))) => {
+            wav_header(mss, f, pos, Some(data_len), fact_sample_count)
+        }
+        _ => Err(WavError::format(FormatKind::MissingChunk)),
+    }
 }

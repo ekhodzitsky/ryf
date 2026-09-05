@@ -84,6 +84,61 @@ fn parse_minimal_pcm_and_reject_garbage() -> Result<()> {
     Ok(())
 }
 
+fn data_then_fmt_file(fmt: &[u8], payload: &[u8]) -> Vec<u8> {
+    let mut body = Vec::new();
+    body.extend_from_slice(b"data");
+    body.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    body.extend_from_slice(payload);
+    if payload.len() % 2 == 1 {
+        body.push(0);
+    }
+    body.extend_from_slice(b"fmt ");
+    body.extend_from_slice(&(fmt.len() as u32).to_le_bytes());
+    body.extend_from_slice(fmt);
+    if fmt.len() % 2 == 1 {
+        body.push(0);
+    }
+    let mut file = Vec::new();
+    file.extend_from_slice(b"RIFF");
+    file.extend_from_slice(&(4 + body.len() as u32).to_le_bytes());
+    file.extend_from_slice(b"WAVE");
+    file.extend_from_slice(&body);
+    file
+}
+
+#[test]
+fn data_before_fmt_parses_and_decodes() -> Result<()> {
+    let payload = [0u8, 0, 0xe8, 0x03, 0x18, 0xfc];
+    let file = data_then_fmt_file(&le_pcm16_fmt(), &payload);
+    let h = parse_ok(&file)?;
+    assert_eq!(h.fmt.codec, SampleCodec::S16);
+    assert_eq!(h.data_pos, 20);
+    let d = crate::decode_bytes(&file, crate::DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 3);
+    // First data still wins when a second data follows fmt.
+    let first = [0u8, 1, 2, 3];
+    let second = [4u8, 5, 6, 7, 8, 9, 10, 11];
+    let fmt = le_pcm16_fmt();
+    let mut body = Vec::new();
+    body.extend_from_slice(b"data");
+    body.extend_from_slice(&(first.len() as u32).to_le_bytes());
+    body.extend_from_slice(&first);
+    body.extend_from_slice(b"fmt ");
+    body.extend_from_slice(&(fmt.len() as u32).to_le_bytes());
+    body.extend_from_slice(&fmt);
+    body.extend_from_slice(b"data");
+    body.extend_from_slice(&(second.len() as u32).to_le_bytes());
+    body.extend_from_slice(&second);
+    let mut two = Vec::new();
+    two.extend_from_slice(b"RIFF");
+    two.extend_from_slice(&(4 + body.len() as u32).to_le_bytes());
+    two.extend_from_slice(b"WAVE");
+    two.extend_from_slice(&body);
+    let d = crate::decode_bytes(&two, crate::DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 2);
+    Ok(())
+}
+
 pub(super) fn riff(fmt: &[u8], data: &[u8]) -> Vec<u8> {
     riff_parts(fmt, None, data)
 }
@@ -263,5 +318,33 @@ fn w64_data_size_without_fact_matches_size_minus_24() -> Result<()> {
     file[size_pos..size_pos + 8].copy_from_slice(&total.to_le_bytes());
     let d = crate::decode_bytes(&file, crate::DecodeOptions::unbounded())?;
     assert_eq!(d.frames(), 4); // 6 payload bytes + 2 pad zeros
+    Ok(())
+}
+
+#[test]
+fn w64_data_before_fmt_decodes() -> Result<()> {
+    let mut pcm = Vec::new();
+    for s in [10i16, -10, 20] {
+        pcm.extend_from_slice(&s.to_le_bytes());
+    }
+    let mut fmt = le_pcm16_fmt();
+    let mut file = W64_GUID_RIFF.to_vec();
+    let size_pos = file.len();
+    file.extend_from_slice(&0u64.to_le_bytes());
+    file.extend_from_slice(&W64_GUID_WAVE);
+    let pad = (8 - (pcm.len() % 8)) % 8;
+    file.extend_from_slice(&W64_GUID_DATA);
+    file.extend_from_slice(&(24u64 + pcm.len() as u64).to_le_bytes());
+    file.extend_from_slice(&pcm);
+    file.extend(std::iter::repeat_n(0u8, pad));
+    let fmt_pad = (8 - (fmt.len() % 8)) % 8;
+    fmt.extend(std::iter::repeat_n(0u8, fmt_pad));
+    file.extend_from_slice(&W64_GUID_FMT);
+    file.extend_from_slice(&(24u64 + fmt.len() as u64).to_le_bytes());
+    file.extend_from_slice(&fmt);
+    let total = file.len() as u64;
+    file[size_pos..size_pos + 8].copy_from_slice(&total.to_le_bytes());
+    let d = crate::decode_bytes(&file, crate::DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 3);
     Ok(())
 }
