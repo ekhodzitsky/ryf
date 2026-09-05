@@ -57,7 +57,7 @@ Typed `WavError`. No `anyhow`, no `thiserror`.
 | `StreamLengthUnknown` | decode needs a known length |
 | `FeatureDisabled` | ADPCM file, `adpcm` feature off |
 | `OddPcm` | PCM byte length is not a whole number of frames |
-| `Empty` | decode produced zero samples |
+| `Empty` | `decode_f32` / `decode_s16` / headerless telephony on zero samples. Planar `read` / `decode_bytes` return 0 frames. |
 | `RiffTooLarge` | size overflow when RF64 is not available |
 
 `FormatKind`: Truncated, MalformedFmt, MalformedChunk, MissingChunk,

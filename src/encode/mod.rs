@@ -1,6 +1,6 @@
 //! WAVE encode: integer PCM 8/16/24/32, IEEE f32, G.711 A-law/mu-law, 1-26
-//! channels. Classic RIFF when it fits; RF64 when sizes overflow. RIFX and
-//! `WAVEFORMATEXTENSIBLE` via [`encode_rifx`] / [`encode_extensible`].
+//! channels. Classic RIFF when it fits; RF64 when sizes overflow. RIFX:
+//! [`encode_rifx`]. `WAVEFORMATEXTENSIBLE`: [`encode_extensible`].
 //! No ADPCM / G.722 / GSM encode.
 
 use std::fs::File;

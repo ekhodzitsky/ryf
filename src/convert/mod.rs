@@ -277,6 +277,17 @@ unsafe fn convert_f32_mono_sse2(src: &[u8], dst: &mut [f32]) {
 
 #[inline]
 pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> f32 {
+    debug_assert!(
+        b.len()
+            >= match codec {
+                SampleCodec::U8 | SampleCodec::ALaw | SampleCodec::MuLaw => 1,
+                SampleCodec::S16 => 2,
+                SampleCodec::S24 => 3,
+                SampleCodec::S24_4 | SampleCodec::S32 | SampleCodec::F32 => 4,
+                SampleCodec::F64 => 8,
+                _ => 0,
+            }
+    );
     match codec {
         SampleCodec::U8 => (b[0] as f32) * (1.0 / 128.0) - 1.0,
         SampleCodec::S16 => {

@@ -28,7 +28,8 @@ fn main() -> ryf::Result<()> {
 ```
 
 From a path, `read` is one plane per channel (archival caps). Speech
-ingest (mix to mono, 2 h / 4 GiB): `read_speech`.
+ingest (mix to mono, 2 h / 4 GiB; duration uses min(file rate, 48 kHz)):
+`read_speech`.
 
 ```rust
 fn main() -> ryf::Result<()> {
@@ -56,7 +57,7 @@ Streaming: `decode_streaming`. Write to a path: `write_s16` / `WavWriter`.
 | G.722 64 kbit/s | yes | yes | yes | yes |
 | GSM 06.10 / wav49 | yes | yes | yes | yes |
 | MS / IMA ADPCM | yes | yes | yes | yes |
-| `WAVEFORMATEXTENSIBLE` | PCM / IEEE / G.711 | no | yes | yes |
+| `WAVEFORMATEXTENSIBLE` | PCM / IEEE / G.711 | PCM / IEEE / G.711 | yes | yes |
 | Wild `fmt ` / short `data` | yes | yes | yes | yes |
 
 ## Write

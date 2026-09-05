@@ -13,12 +13,18 @@ use crate::adpcm::{decode_ima_adpcm, decode_ms_adpcm};
 #[cfg(feature = "adpcm")]
 use crate::adpcm::{for_each_ima_adpcm_block, for_each_ms_adpcm_block};
 
-/// Frames implied by `block_align` (MS: 2 + 2*(ba/ch - 7), IMA: 1 + 2*(ba/ch - 4)).
+/// Frames implied by `block_align` (MS: 2 + 2*(ba/ch - 7);
+/// IMA mono: 1 + 2*(ba - 4); IMA stereo: 1 + 8*floor((ba - 8)/8)).
 /// Matches the nibble walk; header `samplesPerBlock` is ignored (0 / lie).
+/// Stereo IMA leftover shorter than an 8-byte L/R group is dropped.
 pub(crate) fn adpcm_est_frames(data_len: u64, ba: u64, ch: u64, ima: bool) -> u64 {
     let ch = ch.max(1);
     let spb = if ima {
-        ba.saturating_sub(4 * ch).saturating_mul(2) / ch + 1
+        if ch >= 2 {
+            ba.saturating_sub(8) / 8 * 8 + 1
+        } else {
+            ba.saturating_sub(4).saturating_mul(2) + 1
+        }
     } else {
         ba.saturating_sub(7 * ch).saturating_mul(2) / ch + 2
     }

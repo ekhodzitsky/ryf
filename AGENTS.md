@@ -47,7 +47,8 @@ Library: `decode_bytes` / `decode_s16` / `decode_f32` / `decode_reader` /
 `encode_mulaw` / `encode_s16` / `encode_f32` / `write` / `write_s16` /
 `write_f32` / `WavWriter`.
 Caps: `DecodeOptions::default()` is `unbounded` + split;
-`speech()` / `read_speech()` mix to mono with 2 h / 4 GiB.
+`speech()` / `read_speech()` mix to mono with 2 h / 4 GiB
+(duration uses min(file rate, 48 kHz)).
 
 ## Forbidden
 

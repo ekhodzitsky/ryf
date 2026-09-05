@@ -21,6 +21,11 @@ fn block_and_duration_helpers() {
     assert_eq!(adpcm_est_frames(72, 36, 1, true), 130);
     assert_eq!(adpcm_est_frames(32, 32, 1, false), 52);
     assert_eq!(adpcm_est_frames(32, 0, 1, true), 0);
+    // IMA stereo: 8-byte header + 8-byte L/R groups. ba=12 leftover 4 dropped.
+    assert_eq!(adpcm_est_frames(8, 8, 2, true), 1);
+    assert_eq!(adpcm_est_frames(12, 12, 2, true), 1);
+    assert_eq!(adpcm_est_frames(16, 16, 2, true), 9);
+    assert_eq!(adpcm_est_frames(40, 40, 2, true), 33);
     assert_eq!(adpcm_frames_capped(32, 32, 1, false, Some(10)), 10);
     assert_eq!(adpcm_frames_capped(32, 32, 1, false, Some(1_000)), 52);
     assert_eq!(adpcm_frames_capped(32, 32, 1, false, Some(0)), 52);

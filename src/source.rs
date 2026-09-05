@@ -87,7 +87,8 @@ impl<'a> ByteSource<'a> {
         }
     }
 
-    /// Local file, streamed. The cursor is rewound to 0.
+    /// Local file, streamed. Rewinds to 0 when the handle allows it;
+    /// `pos` always follows the real cursor.
     pub fn from_file(file: std::fs::File) -> ByteSource<'static> {
         let mut file = file;
         let len = file
@@ -95,10 +96,8 @@ impl<'a> ByteSource<'a> {
             .ok()
             .map(|m| m.len())
             .or_else(|| file.seek(SeekFrom::End(0)).ok());
-        let pos = match file.seek(SeekFrom::Start(0)) {
-            Ok(p) => p,
-            Err(_) => file.stream_position().unwrap_or(0),
-        };
+        let _ = file.seek(SeekFrom::Start(0));
+        let pos = file.stream_position().unwrap_or(0);
         ByteSource {
             inner: Box::new(file),
             pos,

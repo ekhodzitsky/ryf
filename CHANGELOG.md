@@ -61,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped). ffmpeg already decoded `fmt ` 20 and Wave64-padded 24.
 - IEEE `fmt ` 18 with non-zero `cbSize` (and odd lengths such as 17)
   skip the extra bytes instead of `MalformedFmt`. ffmpeg already did.
+- IMA-ADPCM `fmt ` extra longer than 2 bytes, and WAVEFORMATEXTENSIBLE
+  `cbSize` longer than 22, skip the surplus. ffmpeg already did.
+- IMA stereo duration / RAM estimate drops leftover bytes shorter than
+  an 8-byte L/R nibble group, matching the decoder (e.g. `block_align`
+  12 is 1 frame, not 5).
+- `ByteSource::from_file`: if rewind to 0 fails, `pos` follows the real
+  cursor instead of claiming 0.
 
 ## [0.6.0] - 2026-09-04
 

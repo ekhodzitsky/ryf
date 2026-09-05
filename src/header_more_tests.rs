@@ -166,7 +166,18 @@ fn fmt_adpcm_error_matrix() -> Result<()> {
     assert!(parse_err(&riff(
         &adpcm(WAVE_FORMAT_ADPCM_IMA, 1, 32, 4, &50u16.to_le_bytes()),
         &[0u8; 32]
-    )));
+    ))); // extra_size 4 > remaining 2
+    let mut ima4 = 65u16.to_le_bytes().to_vec();
+    ima4.extend_from_slice(&[0, 0]);
+    assert_eq!(
+        parse_ok(&riff(
+            &adpcm(WAVE_FORMAT_ADPCM_IMA, 1, 32, 4, &ima4),
+            &[0u8; 32]
+        ))?
+        .fmt
+        .codec,
+        SampleCodec::ImaAdpcm
+    );
     Ok(())
 }
 
@@ -179,7 +190,13 @@ fn fmt_extensible_error_matrix() -> Result<()> {
     assert!(parse_err(&riff(
         &ext_fmt(pcm, 16, 16, 0, 1, 10),
         &[0, 1, 2, 3]
-    ))); // cb != 22
+    ))); // cb < 22
+    let mut ext24 = ext_fmt(pcm, 16, 16, 0, 1, 24);
+    ext24.extend_from_slice(&[0, 0]);
+    assert_eq!(
+        parse_ok(&riff(&ext24, &[0, 1]))?.fmt.codec,
+        SampleCodec::S16
+    );
     assert!(parse_err(&riff(&ext_fmt(pcm, 12, 12, 0, 1, 22), &[0u8; 4]))); // bits % 8
     assert!(parse_err(&riff(&ext_fmt(pcm, 16, 24, 0, 1, 22), &[0u8; 4]))); // valid > container
     assert!(parse_err(&riff(&ext_fmt(pcm, 48, 48, 0, 1, 22), &[0u8; 8])));

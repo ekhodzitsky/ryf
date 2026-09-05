@@ -57,7 +57,6 @@ pub(super) fn clamp_i16(v: i32) -> i16 {
 }
 
 /// Microsoft adaptive step: `(adapt[nibble] * delta) >> 8`, then `16..=32767`.
-/// Truncating the i32 to `i16` wraps (e.g. 20000 * 512 >> 8 = 40000 -> -25536).
 #[inline]
 pub(super) fn adapt_ms_delta(delta: i16, nibble: i32) -> i16 {
     let mut new_delta = (i32::from(MS_ADAPTATION[nibble as usize]) * i32::from(delta)) >> 8;

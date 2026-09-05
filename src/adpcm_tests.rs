@@ -161,7 +161,9 @@ fn ima_adpcm_mono_stereo_and_errors() -> Result<()> {
         *b = 0x12;
     }
     let out = decode_ima_block_stereo(&sblock, false)?;
-    assert!(out.len() >= 2);
+    assert_eq!(out.len(), 66); // 1 header frame + 32 bytes = 32 frames, interleaved
+    let leftover = decode_ima_block_stereo(&[0u8; 12], false)?;
+    assert_eq!(leftover.len(), 2); // header only; 4-byte tail dropped
     assert!(decode_ima_block_stereo(&[0u8; 4], false).is_err());
     let mut bad = sblock.clone();
     bad[2] = 100;

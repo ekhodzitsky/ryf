@@ -216,10 +216,15 @@ pub(super) fn parse_fmt_chunk(
                 })
             } else {
                 // WAVE_FORMAT_ADPCM_IMA - outer match is MS | IMA.
-                if extra_size != 2 {
+                // Canonical extra is 2 (`wSamplesPerBlock`); ffmpeg accepts more.
+                if extra_size < 2 {
                     return Err(WavError::format(FormatKind::MalformedFmt));
                 }
                 let samples_per_block = read_u16_endian(mss, big_endian)?;
+                let rest = extra_size - 2;
+                if rest > 0 {
+                    mss.ignore_bytes(u64::from(rest)).map_err(eof_trunc)?;
+                }
                 skip_fmt_tail(mss, rem, extra_size)?;
                 Ok(FmtFields {
                     codec: SampleCodec::ImaAdpcm,
@@ -242,8 +247,10 @@ pub(super) fn parse_fmt_chunk(
                 return Err(WavError::format(FormatKind::MalformedFmt));
             }
 
-            let extra_size = read_u16_endian(mss, big_endian)?;
-            if extra_size != 22 {
+            let extra_size = u32::from(read_u16_endian(mss, big_endian)?);
+            let rem = chunk_len.saturating_sub(18);
+            // Canonical extra is 22; ffmpeg accepts a longer `cbSize`.
+            if extra_size < 22 || extra_size > rem {
                 return Err(WavError::format(FormatKind::MalformedFmt));
             }
 
