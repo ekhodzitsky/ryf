@@ -199,15 +199,9 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 fmt = Some(f);
             }
             b"fact" => {
-                // Canonical fact is exactly 4 bytes (sample count). Longer
-                // facts exist in some RF64 toolchains - accept >= 4 and skip
-                // the surplus; shorter is malformed.
+                // Canonical fact is 4 bytes. ffmpeg accepts longer on RIFF
+                // (BWF tails); take the first 4 and skip the rest.
                 if chunk_len < 4 {
-                    return Err(WavError::format(FormatKind::MalformedChunk));
-                }
-                // Historical bit-exact gate: reject non-canonical 8-byte facts
-                // on plain RIFF (ffmpeg also rejects). RF64 may ship longer.
-                if !is_rf64 && chunk_len != 4 {
                     return Err(WavError::format(FormatKind::MalformedChunk));
                 }
                 let n = u64::from(read_u32_endian(mss, be)?);

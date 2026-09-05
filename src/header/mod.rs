@@ -272,6 +272,7 @@ fn map_ambisonic_channel_count(count: u16) -> Result<usize> {
 
 /// Correct a WAVE channel mask that is not valid for the stated number of
 /// channels.
+#[cfg(test)]
 fn fix_wave_channel_mask(channel_mask: u32, num_channels: u16) -> Option<u32> {
     let n = u32::from(num_channels);
     if n > 32 {

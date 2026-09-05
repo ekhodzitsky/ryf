@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - WAVE `data` before `fmt ` is accepted (ffmpeg). The first `data` chunk
   still wins.
+- RIFF `fact` longer than 4 bytes is accepted (ffmpeg / BWF tails). The
+  sample count is the first 4 bytes; the rest is skipped.
+- `WAVEFORMATEXTENSIBLE` channel mask bits 18+ and `SPEAKER_ALL`
+  (`0x80000000`) no longer reject the file. `nChannels` wins (ffmpeg).
 
 ## [0.7.1] - 2026-09-05
 

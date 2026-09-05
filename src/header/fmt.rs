@@ -7,8 +7,8 @@ use super::{
     KSDATAFORMAT_SUBTYPE_MULAW, KSDATAFORMAT_SUBTYPE_PCM, SampleCodec, WAVE_FORMAT_ADPCM_G722,
     WAVE_FORMAT_ADPCM_IMA, WAVE_FORMAT_ADPCM_MS, WAVE_FORMAT_ALAW, WAVE_FORMAT_EXTENSIBLE,
     WAVE_FORMAT_G722_ADPCM, WAVE_FORMAT_G722_ASTERISK, WAVE_FORMAT_GSM610, WAVE_FORMAT_IEEE_FLOAT,
-    WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width, fix_wave_channel_mask,
-    map_ambisonic_channel_count, map_wave_channel_count, pcm_codec_for,
+    WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width, map_ambisonic_channel_count,
+    map_wave_channel_count, pcm_codec_for,
 };
 use crate::error::{FormatKind, Result, WavError};
 use crate::gsm::MS_BLOCK;
@@ -264,7 +264,7 @@ pub(super) fn parse_fmt_chunk(
                 return Err(WavError::format(FormatKind::InvalidSize));
             }
 
-            let channel_mask = read_u32_endian(mss, big_endian)?;
+            let _channel_mask = read_u32_endian(mss, big_endian)?;
 
             let mut sub_format_guid = [0u8; 16];
             mss.read_buf_exact(&mut sub_format_guid)
@@ -338,27 +338,12 @@ pub(super) fn parse_fmt_chunk(
                 _ => return Err(WavError::unsupported_codec(0xFFFE)),
             };
 
-            // Prefer header channel count; use mask fix-up when mask is non-zero
-            // and consistent. Broken mask with honest nChannels falls back.
+            // nChannels wins. Mask bits including SPEAKER_ALL (0x80000000)
+            // and bits 18+ are ignored (ffmpeg).
             let channels = if is_ambisonic {
                 map_ambisonic_channel_count(num_channels)?
             } else {
-                // Prefer nChannels (speech-ingest). Mask is used only to reject
-                // impossible high bits when non-zero and unfixable.
-                match (
-                    channel_mask,
-                    fix_wave_channel_mask(channel_mask, num_channels),
-                ) {
-                    (0, _) => map_wave_channel_count(num_channels)?,
-                    (_, Some(fixed)) if fixed >> 18 == 0 => map_wave_channel_count(num_channels)?,
-                    (_, Some(_)) => {
-                        return Err(WavError::format(FormatKind::ChannelLayout));
-                    }
-                    (_, None) => {
-                        // Cannot fit mask; still accept honest nChannels when possible.
-                        map_wave_channel_count(num_channels)?
-                    }
-                }
+                map_wave_channel_count(num_channels)?
             };
 
             Ok(FmtFields {

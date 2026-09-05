@@ -365,7 +365,7 @@ fn test_diff_fact_chunk() -> Result<()> {
     }
     .build();
     assert_bit_exact_both_modes("fact chunk", &wav);
-    // Malformed fact (len != 4): symphonia rejects at the probe stage.
+    // Longer fact (BWF tail / 8 zero bytes): first 4 are 0 (unknown), skip rest.
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(11), 300, 1);
     let wav = WavBuilder {
         chunks_before_data: vec![(*b"fact", vec![0; 8])],
@@ -373,7 +373,7 @@ fn test_diff_fact_chunk() -> Result<()> {
         ..WavBuilder::new(TestCodec::S16)
     }
     .build();
-    assert_both_err("fact len 8", &wav);
+    assert_bit_exact_both_modes("fact len 8", &wav);
     Ok(())
 }
 

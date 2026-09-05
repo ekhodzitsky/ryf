@@ -221,10 +221,8 @@ fn fmt_extensible_error_matrix() -> Result<()> {
         &ext_fmt([0u8; 16], 16, 16, 0, 1, 22),
         &[0, 1]
     )));
-    assert!(parse_err(&riff(
-        &ext_fmt(pcm, 16, 16, 1u32 << 19, 1, 22),
-        &[0, 1]
-    )));
+    let h = parse_ok(&riff(&ext_fmt(pcm, 16, 16, 1u32 << 19, 1, 22), &[0, 1]))?;
+    assert_eq!(h.fmt.channels, 1);
     let h = parse_ok(&riff(&ext_fmt(pcm, 16, 16, 1u32 << 31, 3, 22), &[0u8; 12]))?;
     assert_eq!(h.fmt.channels, 3);
     let wav = riff(&ext_fmt(alaw, 8, 4, 0, 1, 22), &[0xd5]);

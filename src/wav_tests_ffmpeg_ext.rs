@@ -68,7 +68,8 @@ fn test_diff_extensible_channel_masks() -> Result<()> {
         ("mask popcount>ch fix-down", 2, Some(0xF), true),
         ("mask popcount<ch fix-up", 4, Some(0x3), true),
         ("mask 8ch full", 8, Some(0xFF), true),
-        ("mask bit >= 18", 1, Some(0x4_0000), false),
+        ("mask bit 18", 1, Some(0x4_0000), true),
+        ("mask SPEAKER_ALL", 1, Some(0x8000_0000), true),
     ];
     for &(label, ch, mask, expect_ok) in cases {
         let payload = gen_payload(
