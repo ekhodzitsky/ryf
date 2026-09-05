@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-05
+
 ### Fixed
 
 - RF64 `ds64` size table is applied to non-`data` chunks whose size is
@@ -344,7 +346,8 @@ stay closed.
   (`header`, `convert`, `pull`, `adpcm`, `wav_tests`). Decode behavior is
   unchanged. README layout lists the split directories.
 
-[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/ekhodzitsky/ryf/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/ekhodzitsky/ryf/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ekhodzitsky/ryf/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ekhodzitsky/ryf/compare/v0.5.0...v0.5.1
