@@ -130,6 +130,8 @@ pub(super) const RF64_DATA_SIZE_POS: u64 = 28;
 pub(super) const RF64_SAMPLE_COUNT_POS: u64 = 36;
 /// `fact` sampleCount in an RF64 IEEE / G.711 header (after ds64 + WAVEFORMATEX).
 pub(super) const RF64_FACT_FRAMES_POS: u64 = 82;
+/// `fact` sampleCount after ds64 + 40-byte extensible `fmt `.
+pub(super) const RF64_EXTENSIBLE_FACT_FRAMES_POS: u64 = 104;
 
 pub(super) fn push_rf64_header(
     out: &mut Vec<u8>,

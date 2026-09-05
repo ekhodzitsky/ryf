@@ -18,6 +18,7 @@ stay closed.
 - `WAVEFORMATEXTENSIBLE` G.711 A-law / mu-law write (`encode_extensible` /
   `WavWriter::new_extensible`).
 - `encode_extensible` uses RF64 when classic RIFF sizes overflow `u32`.
+- `WavWriter::new_extensible` auto-promotes to RF64 the same way.
 
 ### Changed
 

@@ -7,10 +7,11 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use super::header::{
-    RF64_DATA_SIZE_POS, RF64_FACT_FRAMES_POS, RF64_RIFF_SIZE_POS, RF64_SAMPLE_COUNT_POS,
-    data_len_pos, extensible_data_len_pos, extensible_fact_frames_pos, extensible_riff_prefix,
-    fact_frames_pos, frame_bytes, needs_rf64, padded_data_len, push_extensible_header, push_header,
-    push_rf64_header, push_rifx_header, rf64_header_len, riff_body_len, riff_prefix,
+    RF64_DATA_SIZE_POS, RF64_EXTENSIBLE_FACT_FRAMES_POS, RF64_FACT_FRAMES_POS, RF64_RIFF_SIZE_POS,
+    RF64_SAMPLE_COUNT_POS, data_len_pos, extensible_data_len_pos, extensible_fact_frames_pos,
+    extensible_riff_prefix, fact_frames_pos, frame_bytes, needs_rf64, padded_data_len,
+    push_extensible_header, push_header, push_rf64_extensible_header, push_rf64_header,
+    push_rifx_header, rf64_extensible_header_len, rf64_header_len, riff_body_len, riff_prefix,
     swap_sample_bytes, u32_len, validate_spec,
 };
 use super::{WriteFormat, WriteSpec};
@@ -20,6 +21,7 @@ use crate::error::{FormatKind, Result, WavError};
 enum WriterKind {
     Riff,
     Rf64,
+    Rf64Extensible,
     Rifx,
     Extensible,
 }
@@ -109,6 +111,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
     }
 
     /// Write a `WAVEFORMATEXTENSIBLE` header (PCM / IEEE / G.711).
+    /// Promotes to RF64 on write if sizes would overflow `u32`.
     pub fn new_extensible(mut inner: W, spec: WriteSpec) -> Result<Self> {
         validate_spec(spec)?;
         let mut header = Vec::with_capacity(80);
@@ -143,7 +146,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
                 return Err(WavError::RiffTooLarge);
             }
             WriterKind::Extensible if overflow(extensible_riff_prefix(self.spec), next) => {
-                return Err(WavError::RiffTooLarge);
+                self.promote_to_rf64()?;
             }
             _ => {}
         }
@@ -199,16 +202,26 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         Ok(())
     }
 
-    /// Rewrite a classic RIFF header as RF64 and slide the payload forward.
+    /// Rewrite a RIFF or extensible header as RF64 and slide the payload.
     fn promote_to_rf64(&mut self) -> Result<()> {
-        if self.kind == WriterKind::Rf64 {
+        if matches!(self.kind, WriterKind::Rf64 | WriterKind::Rf64Extensible) {
             return Ok(());
         }
-        if self.kind != WriterKind::Riff {
+        let ext = self.kind == WriterKind::Extensible;
+        if self.kind != WriterKind::Riff && !ext {
             return Err(WavError::format(FormatKind::InvalidOperation));
         }
-        let old_len = u64::from(riff_prefix(self.spec)).saturating_add(8);
-        let new_len = rf64_header_len(self.spec);
+        let old_len = u64::from(if ext {
+            extensible_riff_prefix(self.spec)
+        } else {
+            riff_prefix(self.spec)
+        })
+        .saturating_add(8);
+        let new_len = if ext {
+            rf64_extensible_header_len(self.spec)
+        } else {
+            rf64_header_len(self.spec)
+        };
         let delta = new_len.saturating_sub(old_len);
         let payload = self.data_bytes;
         const BLOCK: usize = 64 * 1024;
@@ -227,12 +240,17 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         let fb = frame_bytes(self.spec)? as u64;
         let frames = payload.checked_div(fb).unwrap_or(0);
         let mut header = Vec::with_capacity(new_len as usize);
-        push_rf64_header(&mut header, self.spec, payload, frames)?;
+        if ext {
+            push_rf64_extensible_header(&mut header, self.spec, payload, frames)?;
+            self.kind = WriterKind::Rf64Extensible;
+        } else {
+            push_rf64_header(&mut header, self.spec, payload, frames)?;
+            self.kind = WriterKind::Rf64;
+        }
         self.inner.seek(SeekFrom::Start(0))?;
         self.inner.write_all(&header)?;
         self.inner
             .seek(SeekFrom::Start(new_len.saturating_add(payload)))?;
-        self.kind = WriterKind::Rf64;
         Ok(())
     }
 
@@ -243,7 +261,7 @@ impl<W: Read + Write + Seek> WavWriter<W> {
 
     fn patch(&mut self) -> Result<()> {
         match self.kind {
-            WriterKind::Rf64 => self.patch_rf64(),
+            WriterKind::Rf64 | WriterKind::Rf64Extensible => self.patch_rf64(),
             WriterKind::Extensible => self.patch_sized(
                 extensible_riff_prefix(self.spec),
                 extensible_data_len_pos(self.spec),
@@ -291,10 +309,16 @@ impl<W: Read + Write + Seek> WavWriter<W> {
     }
 
     fn patch_rf64(&mut self) -> Result<()> {
+        let ext = self.kind == WriterKind::Rf64Extensible;
         let data_len = self.data_bytes;
         let fb = frame_bytes(self.spec)? as u64;
         let frames = data_len.checked_div(fb).unwrap_or(0);
-        let riff_size = rf64_header_len(self.spec)
+        let header_len = if ext {
+            rf64_extensible_header_len(self.spec)
+        } else {
+            rf64_header_len(self.spec)
+        };
+        let riff_size = header_len
             .saturating_add(padded_data_len(data_len))
             .saturating_sub(8);
         self.inner.seek(SeekFrom::Start(RF64_RIFF_SIZE_POS))?;
@@ -305,7 +329,12 @@ impl<W: Read + Write + Seek> WavWriter<W> {
         self.inner.write_all(&frames.to_le_bytes())?;
         if self.spec.format.has_fact() {
             let fact = frames.min(u64::from(u32::MAX)) as u32;
-            self.inner.seek(SeekFrom::Start(RF64_FACT_FRAMES_POS))?;
+            let pos = if ext {
+                RF64_EXTENSIBLE_FACT_FRAMES_POS
+            } else {
+                RF64_FACT_FRAMES_POS
+            };
+            self.inner.seek(SeekFrom::Start(pos))?;
             self.inner.write_all(&fact.to_le_bytes())?;
         }
         self.inner.seek(SeekFrom::End(0))?;

@@ -18,7 +18,7 @@ native sample rate.
   classic RIFF when it fits, RF64 when it does not (`encode_rf64` /
   `WavWriter::new_rf64` to force). RIFX: `encode_rifx` /
   `WavWriter::new_rifx`. `WAVEFORMATEXTENSIBLE` PCM/IEEE/G.711:
-  `encode_extensible` / `WavWriter::new_extensible` (RF64 when sizes
+  `encode_extensible` / `WavWriter::new_extensible` (both RF64 when sizes
   overflow). Mono PCM16 helper `encode_s16` / `write_s16`; `encode_f32`;
   `encode_alaw` / `encode_mulaw`. No ADPCM / G.722 / GSM encode.
 - No resample. No `mmap` / `libc`. No C/asm except optional SIMD in

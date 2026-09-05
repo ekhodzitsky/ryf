@@ -95,6 +95,43 @@ fn wav_writer_rifx_and_extensible_match_encode() -> Result<()> {
 }
 
 #[test]
+fn wav_writer_extensible_promotes_to_rf64() -> Result<()> {
+    use std::io::Cursor;
+
+    let pcm = f32_to_s16le(&[0.1, -0.2, 0.0]);
+    let spec = WriteSpec::s16(16_000, 1);
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new_extensible(&mut cur, spec)?;
+        w.write_pcm(&pcm)?;
+        w.force_rf64()?;
+        w.finalize()?;
+    }
+    let wav = cur.into_inner();
+    assert_eq!(&wav[..4], b"RF64");
+    assert_eq!(&wav[56..58], &0xFFFEu16.to_le_bytes());
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 3);
+
+    let mut fpcm = Vec::new();
+    for s in [0.5f32, -0.25] {
+        fpcm.extend_from_slice(&s.to_le_bytes());
+    }
+    let mut cur = Cursor::new(Vec::new());
+    {
+        let mut w = WavWriter::new_extensible(&mut cur, WriteSpec::f32(16_000, 1))?;
+        w.write_pcm(&fpcm)?;
+        w.force_rf64()?;
+        w.finalize()?;
+    }
+    let wav = cur.into_inner();
+    assert_eq!(&wav[..4], b"RF64");
+    let d = decode_bytes(&wav, DecodeOptions::unbounded())?;
+    assert_eq!(d.frames(), 2);
+    Ok(())
+}
+
+#[test]
 fn wav_writer_alaw_matches_encode() -> Result<()> {
     use std::io::Cursor;
 
