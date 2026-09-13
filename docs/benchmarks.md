@@ -51,6 +51,21 @@ same `cargo bench --bench wav --features bench-c`. Point estimate.
 `decode_streaming` s16 mono is 7.26 mus. A 2 vCPU KVM is noisier than the
 Apple Silicon box; treat the ratios as order-of-magnitude, not a ranking.
 
+Linux x86_64 (AMD Ryzen AI 9 HX 370, 12 cores / 24 threads, SSE4.1),
+Ubuntu 26.04, rustc 1.98, same `cargo bench --bench wav --features bench-c`.
+Point estimate.
+
+| Workload | ryf | hound | symphonia | wavers | dr_wav | vs h / sy / wv / dr |
+|---|---|---|---|---|---|---|
+| decode PCM16 mono to f32 | 1.77 mus | 202 mus | 48.0 mus | 6.64 mus | 4.48 mus | **114x / 27x / 3.8x / 2.5x** |
+| decode PCM16 stereo mix to f32 | 5.37 mus | 419 mus | 94.8 mus | 30.5 mus | 25.7 mus | **78x / 18x / 5.7x / 4.8x** |
+| decode IEEE f32 mono | 1.41 mus | 69.4 mus | 45.6 mus | 3.93 mus | 2.47 mus | **49x / 32x / 2.8x / 1.8x** |
+| encode PCM16 mono (from i16) | 1.27 mus | 60.3 mus | - | - | 1.28 mus | **47x** vs hound; **tie** vs C |
+| encode IEEE f32 mono | 1.28 mus | 23.0 mus | - | - | 2.32 mus | **18x** vs hound; **1.8x** vs C |
+
+`decode_streaming` s16 mono is 2.28 mus. Native hardware, not a KVM; still
+not a ranking against the Apple Silicon or EPYC-Rome rows.
+
 ```sh
 just bench          # Rust peers
 just bench-c        # + vendored dr_wav (needs a C compiler)

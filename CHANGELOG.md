@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Linux x86_64 SSE Criterion numbers in [benchmarks.md](docs/benchmarks.md)
   (AMD EPYC-Rome, 2 vCPU KVM, rustc 1.88, same harness as Apple Silicon).
+- Linux x86_64 SSE Criterion numbers for AMD Ryzen AI 9 HX 370
+  (Ubuntu 26.04, rustc 1.98, same harness) in [benchmarks.md](docs/benchmarks.md).
 
 ## [0.7.2] - 2026-09-05
 

@@ -86,7 +86,8 @@ Linux x86 SSE: [benchmarks](docs/benchmarks.md). Full matrix:
 ## Speed
 
 In-memory 2 s @ 16 kHz RIFF to mixed planar `f32`. Apple Silicon (NEON)
-below. Linux x86 SSE (EPYC-Rome KVM) in [benchmarks](docs/benchmarks.md).
+below. Linux x86 SSE (Ryzen AI 9 HX 370; EPYC-Rome KVM) in
+[benchmarks](docs/benchmarks.md).
 **Not** a file on disk. Encode s16 is a **tie** with dr_wav on this
 machine.
 
