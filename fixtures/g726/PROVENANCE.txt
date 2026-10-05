@@ -1,0 +1,59 @@
+G.726 test vectors. 160 samples, mono, 8000 Hz, signed 16-bit little endian.
+
+tone.s16 is synthesized by this repository (not copied from ffmpeg):
+  samples [0, 40) = 0
+  samples [40, 50) = 12000
+  samples [50, 160) = round(sin((n - 50) * 440 * tau / 8000) * 8000)
+  tau is the circle constant. round is half away from zero.
+
+aal2-N.bin is that tone encoded by ffmpeg 7.0.2-static
+(-c:a g726 -code_size N -f g726). This is ITU-T I.366.2 Annex E
+packing: first codeword in the most significant bits. WAVE tag 0x0045
+uses this order. ffmpeg calls the muxer "raw big-endian G.726
+(left-justified)".
+
+rfc3551-N.bin is the same tone with -c:a g726le -f g726le. This is
+RFC 3551 section 4.5.4: first codeword in the least significant bits.
+ffmpeg calls the muxer "raw little-endian G.726 (right-justified)".
+
+pcm-N.s16 is ffmpeg 7.0.2 decoding aal2-N.bin to s16le
+(-f g726 -code_size N). The rfc3551 bitstream of the same rate decodes
+to the same samples. N is 2, 3, 4, or 5 (16/24/32/40 kbit/s).
+
+Integer checks compare these s16 samples. Planar f32 is each s16 times
+1/32768. That scale is exact against the integers; it is not a claim
+that f32le from ffmpeg matches bit for bit.
+
+The tone is ours. The compressed bytes are ffmpeg's encoding of that
+tone, kept as vectors. ffmpeg source is not vendored.
+
+reset.s16 is a second synthesized vector, 1624 samples, same format:
+
+  samples [0, 800) are full-scale random signs, +30000 or -30000.
+  The generator is xorshift32 with seed 0xA5A51234. Each step is
+  x = x xor (x shifted left 13), then xor (x shifted right 17),
+  then xor (x shifted left 5). An even x writes +30000, an odd x
+  writes -30000.
+  samples [800, 1304) = round(sin(n * 2600 * tau / 8000) * 4000)
+  samples [1304, 1624) = round(sin(n * 2600 * tau / 8000) * 32000)
+  n is the sample index from the start, so the 2600 Hz phase continues
+  through the level jump. tau and round are the same as tone.s16.
+
+The signs push the slow scale factor up. The 2600 Hz section is the
+tone. The jump from amplitude 4000 to 32000 is the level change that
+sets the tone-reset path once.
+
+reset-aal2-N.bin is that vector encoded by ffmpeg 7.0.2-static
+(-c:a g726 -code_size N -f g726). reset-rfc3551-N.bin uses
+-c:a g726le -f g726le. N is 2 or 5 (16 or 40 kbit/s).
+reset-pcm-N.s16 is ffmpeg 7.0.2 decoding reset-aal2-N.bin to s16le.
+The rfc3551 bitstream of the same rate decodes to the same samples.
+
+On these bitstreams the tone-reset arm runs once: sample 1308 at
+16 kbit/s, sample 1305 at 40 kbit/s. The ylint > 9 arm does not run.
+The largest slow scale on the vector is yl 327515 at 16 kbit/s and
+323211 at 40 kbit/s, so ylint is 9. An 8000-sample run of the same
+sign generator reaches yl 327617 at 16 kbit/s, the fixed point when
+the fast scale yu is clipped to 5120, and yl 324079 at 40 kbit/s.
+327617 shifted right by 15 is still 9. ylint > 9 would need
+yl >= 327680, which that clip does not produce.

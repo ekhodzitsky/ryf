@@ -1,13 +1,14 @@
-//! WAVE to planar `f32`. G.711, G.722, GSM, ADPCM, RF64. Zero default deps.
+//! WAVE to planar `f32`. G.711, G.722, G.726, GSM, ADPCM, RF64. Zero default deps.
 //!
 //! [`read`] / [`decode_bytes`] use [`DecodeOptions::default`]: split channels,
 //! archival caps. Speech ingest (mix-to-mono, 2 h): [`read_speech`] /
-//! [`DecodeOptions::speech`]. G.711 / G.722 / GSM: WAVE tags plus headerless
-//! [`decode_g711`] / [`decode_g722`] / [`decode_gsm`] (G.722 is 64 kbit/s
-//! only, output 16 kHz; GSM is 8 kHz wav49). Write: PCM U8/S16/S24/S32 +
-//! IEEE f32, G.711 A-law/mu-law, RIFF / RF64 / RIFX ([`encode`] /
-//! [`encode_alaw`] / [`encode_rifx`] / [`encode_extensible`] /
-//! [`WavWriter`]). No ADPCM / G.722 / GSM encode.
+//! [`DecodeOptions::speech`]. G.711 / G.722 / G.726 / GSM: WAVE tags plus
+//! headerless [`decode_g711`] / [`decode_g722`] / [`decode_g726`] /
+//! [`decode_gsm`] (G.722 is 64 kbit/s only, output 16 kHz; G.726 is mono
+//! 8000 Hz at 16/24/32/40 kbit/s; GSM is 8 kHz wav49). Write: PCM
+//! U8/S16/S24/S32 + IEEE f32, G.711 A-law/mu-law, RIFF / RF64 / RIFX
+//! ([`encode`] / [`encode_alaw`] / [`encode_rifx`] / [`encode_extensible`] /
+//! [`WavWriter`]). No ADPCM / G.722 / G.726 / GSM encode.
 //!
 //! [`DecodedWav`], [`WavError`], [`WriteSpec`]. GitHub README is the crate
 //! pitch; this page is the API.
@@ -31,6 +32,7 @@ mod encode;
 mod error;
 mod g711;
 mod g722;
+mod g726;
 mod gsm;
 pub(crate) mod header;
 mod options;
@@ -47,6 +49,7 @@ pub use encode::{
 pub use error::{FormatKind, Result, WavError};
 pub use g711::{G711Law, decode_g711, decode_g711_alaw, decode_g711_mulaw};
 pub use g722::{decode_g722, decode_g722_mono};
+pub use g726::{G726Decoder, G726Packing, G726Rate, Tag0064, decode_g726, decode_g726_mono};
 pub use gsm::{decode_gsm, decode_gsm_mono};
 pub use options::{
     DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,

@@ -11,13 +11,20 @@ Streaming (`decode_streaming`) shares the convert kernels and keeps peak
 RAM at ~256 KiB of source PCM plus one planar block.
 
 Headerless telephony: `decode_g711` / `decode_g711_alaw` / `decode_g711_mulaw`,
-`decode_g722` / `decode_g722_mono`, `decode_gsm` / `decode_gsm_mono`. G.722
-is **64 kbit/s only** (56/48 not decoded); output is always 16 kHz. WAVE
-tags `0x0064` (Asterisk/SBC), `0x0065` (mmreg), `0x028F` (ffmpeg). GSM is
-Microsoft GSM 06.10 / wav49, WAVE tag `0x0031`, 8 kHz, 65-byte blocks.
-G.722 and GSM are always on (not the `adpcm` feature). `probe` /
-`probe_with` / `sniff_wav`; G.722 probe is `ProbeCodec::G722`, GSM is
-`ProbeCodec::Gsm`. Pack helpers: `f32_to_s16le` / `s16le_to_f32`.
+`decode_g722` / `decode_g722_mono`, `decode_g726` / `decode_g726_mono`,
+`decode_gsm` / `decode_gsm_mono`. G.722 is **64 kbit/s only** (56/48 not
+decoded); output is always 16 kHz. WAVE tags `0x0065` (mmreg) and `0x028F`
+(ffmpeg) are G.722. Tag `0x0064` is G.722 when the byte rate is 64 kbit/s
+per the `Tag0064::Auto` rule; other layouts are `FormatKind::AmbiguousCodec`
+unless `DecodeOptions::with_tag_0064` forces G.722 or G.726. G.726 is mono,
+8000 Hz, 16/24/32/40 kbit/s. Headerless calls pass `G726Rate` and
+`G726Packing` (`Rfc3551` or `Aal2`); WAVE tag `0x0045` is AAL2.
+`G726Decoder::push` / `finish` / `reset` is the incremental state.
+GSM is Microsoft GSM 06.10 / wav49, WAVE tag `0x0031`, 8 kHz, 65-byte
+blocks. G.722, G.726, and GSM are always on (not the `adpcm` feature).
+`probe` / `probe_with` / `sniff_wav`; probe codecs include
+`ProbeCodec::G722`, `ProbeCodec::G726`, and `ProbeCodec::Gsm`. Pack
+helpers: `f32_to_s16le` / `s16le_to_f32`.
 
 ## Caps
 
@@ -61,8 +68,9 @@ Typed `WavError`. No `anyhow`, no `thiserror`.
 | `RiffTooLarge` | size overflow when RF64 is not available |
 
 `FormatKind`: Truncated, MalformedFmt, MalformedChunk, MissingChunk,
-ChannelLayout, InvalidSize, UnsupportedWaveFormat, Adpcm, InvalidOperation.
-The enum is `non_exhaustive`.
+ChannelLayout, InvalidSize, UnsupportedWaveFormat, Adpcm, InvalidOperation,
+AmbiguousCodec (tag `0x0064` with no 64 kbit/s G.722 signature and no
+`Tag0064` override). The enum is `non_exhaustive`.
 
 `is_format_class()` is the NotWave / Format / StreamLengthUnknown / OddPcm /
 Empty bucket for higher layers.
@@ -70,7 +78,8 @@ Empty bucket for higher layers.
 ## Versioning
 
 0.7 is the 1.0-prep line. `WavError`, `FormatKind`, `WriteFormat`,
-`ProbeCodec`, and public option/result structs are `non_exhaustive` so 1.0
-can add variants or fields. `ChannelMode` and `G711Law` stay closed.
+`ProbeCodec`, `G726Rate`, `G726Packing`, `Tag0064`, `G726Decoder`, and
+public option/result structs are `non_exhaustive` so 1.0 can add variants
+or fields. `ChannelMode` and `G711Law` stay closed.
 `ByteSource` is exported at the crate root; the `source` module is
 crate-private. Construct `DecodeOptions` / `WriteSpec` with the builders.

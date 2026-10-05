@@ -53,6 +53,8 @@ fn decode_adpcm_wrong_codec_errors() {
         adpcm_ima: None,
         big_endian: false,
         format_tag: 1,
+        g726: None,
+        tag0064: None,
     };
     let err = decode_adpcm_interleaved(&mut ByteSource::from_slice(&[]), &fmt, 0, 10);
     #[cfg(feature = "adpcm")]
@@ -178,6 +180,40 @@ fn streaming_f32_and_adpcm_seeds() -> Result<()> {
     let mut src = ByteSource::from_slice(&long);
     let err = decode_streaming(&mut src, &opts, |_| Ok(())).unwrap_err();
     assert!(matches!(err, WavError::TooLong { .. }));
+    Ok(())
+}
+
+/// Mono IEEE f32 must take the specialized pull, not the generic arm.
+#[test]
+fn pull_mono_f32_streaming_matches_decode_bytes() -> Result<()> {
+    use std::sync::atomic::Ordering;
+
+    let mut payload = Vec::new();
+    for v in [0.0f32, 0.5, -0.25] {
+        payload.extend_from_slice(&v.to_le_bytes());
+    }
+    let wav = riff_pcm(3, 8_000, 1, 32, &payload);
+    let opts = DecodeOptions::unbounded().with_channel_mode(ChannelMode::Mono);
+    let decoded = crate::decode_bytes(&wav, opts.clone())?;
+
+    let hits = super::stream::pull_mono_f32_hits();
+    hits.store(0, Ordering::Relaxed);
+    let mut src = ByteSource::from_slice(&wav);
+    let mut got = Vec::new();
+    let info = decode_streaming(&mut src, &opts, |block| {
+        assert_eq!(block.planar.len(), 1);
+        got.extend_from_slice(block.planar[0]);
+        Ok(())
+    })?;
+    assert!(hits.load(Ordering::Relaxed) > 0);
+
+    assert_eq!(info.sample_rate, decoded.sample_rate);
+    assert_eq!(info.channels, 1);
+    assert_eq!(info.frames, decoded.frames());
+    assert_eq!(got.len(), decoded.channels[0].len());
+    for (i, (a, b)) in got.iter().zip(decoded.channels[0].iter()).enumerate() {
+        assert_eq!(a.to_bits(), b.to_bits(), "i={i}");
+    }
     Ok(())
 }
 

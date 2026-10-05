@@ -12,3 +12,26 @@ default.profraw
 /*.wav
 /*.pcm
 /out.wav
+
+# Local agent state. Never commit. Patterns apply at any depth.
+.grok
+.serena
+.claude
+.codex
+.cursor
+.kimi
+.kimi-code
+.agents
+.aider
+.aider.*
+.claude-memory-compiler
+.codebase-memory
+.codebase-memory-*
+.mcp.json
+.omc
+.omx
+.superpowers
+.gstack
+backlog
+.backlog
+backlog.config.yml

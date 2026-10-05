@@ -90,8 +90,11 @@ pub enum ProbeCodec {
     MsAdpcm,
     /// IMA/DVI ADPCM (`0x0011`).
     ImaAdpcm,
-    /// ITU-T G.722 64 kbit/s (WAVE tags 0x0064 / 0x0065 / 0x028F).
+    /// ITU-T G.722 64 kbit/s. Tags `0x0065` and `0x028F`, plus `0x0064`
+    /// when the byte rate is 64 kbit/s. See [`crate::Tag0064`].
     G722,
+    /// ITU-T G.726, 16/24/32/40 kbit/s, mono, 8000 Hz.
+    G726,
     /// Microsoft GSM 06.10 / wav49 (`0x0031`).
     Gsm,
     /// `fmt ` parsed, codec not implemented.
@@ -115,6 +118,9 @@ pub(crate) enum SampleCodec {
     MsAdpcm,
     ImaAdpcm,
     G722,
+    G726,
+    /// Tag `0x0064` before [`crate::Tag0064`] classification.
+    Unresolved0064,
     Gsm,
     Unsupported,
 }
@@ -133,8 +139,9 @@ impl SampleCodec {
             SampleCodec::MsAdpcm => ProbeCodec::MsAdpcm,
             SampleCodec::ImaAdpcm => ProbeCodec::ImaAdpcm,
             SampleCodec::G722 => ProbeCodec::G722,
+            SampleCodec::G726 => ProbeCodec::G726,
+            SampleCodec::Unresolved0064 | SampleCodec::Unsupported => ProbeCodec::Unsupported,
             SampleCodec::Gsm => ProbeCodec::Gsm,
-            SampleCodec::Unsupported => ProbeCodec::Unsupported,
         }
     }
 
@@ -157,6 +164,25 @@ pub(crate) struct FmtFields {
     pub(crate) big_endian: bool,
     /// WAVE `wFormatTag` (extensible is `0xFFFE`).
     pub(crate) format_tag: u16,
+    /// Set for G.726. `None` for every other codec.
+    pub(crate) g726: Option<G726Params>,
+    /// Raw numbers for tag `0x0064`, before classification.
+    pub(crate) tag0064: Option<Tag0064Facts>,
+}
+
+/// G.726 codeword width and octet packing selected from `fmt `.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct G726Params {
+    pub(crate) bits: u8,
+    pub(crate) packing: crate::g726::G726Packing,
+}
+
+/// `nAvgBytesPerSec`, `wBitsPerSample`, and `nBlockAlign` of tag `0x0064`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Tag0064Facts {
+    pub(crate) byte_rate: u32,
+    pub(crate) bits: u16,
+    pub(crate) block_align: u16,
 }
 
 /// Parsed stream header up to the start of the `data` chunk.
@@ -179,9 +205,12 @@ pub(crate) const WAVE_FORMAT_MULAW: u16 = 0x0007;
 pub(crate) const WAVE_FORMAT_ADPCM_IMA: u16 = 0x0011;
 /// Microsoft GSM 06.10 (Asterisk wav49).
 pub(crate) const WAVE_FORMAT_GSM610: u16 = 0x0031;
-/// Asterisk / SBC / Cisco G.722-in-WAV (mmreg names this G.726; same codec
-/// as 0x028F in the telephony files this crate ingests).
+/// Tag `0x0064`. mmreg names it `WAVE_FORMAT_G726_ADPCM` (APICOM).
+/// Asterisk / SBC / Cisco write G.722 here. Classification is
+/// [`crate::Tag0064`], not the tag number alone.
 pub(crate) const WAVE_FORMAT_G722_ASTERISK: u16 = 0x0064;
+/// ffmpeg WAV tag for G.726 (AAL2 / MSB-first packing).
+pub(crate) const WAVE_FORMAT_G726: u16 = 0x0045;
 /// Microsoft `WAVE_FORMAT_G722_ADPCM`.
 pub(crate) const WAVE_FORMAT_G722_ADPCM: u16 = 0x0065;
 /// ffmpeg / libavcodec `ADPCM_G722`.

@@ -1,10 +1,16 @@
 //! ADPCM pull / collect (MS + IMA), gated on the `adpcm` feature.
 
-use super::{DecodePlan, StreamBlock, emit_mono_block, emit_split_block};
+use super::{DecodePlan, StreamBlock};
+#[cfg(feature = "adpcm")]
+use super::{emit_mono_block, emit_split_block};
+#[cfg(feature = "adpcm")]
 use crate::ChannelMode;
-use crate::error::{FormatKind, Result, WavError};
+#[cfg(feature = "adpcm")]
+use crate::error::FormatKind;
+use crate::error::{Result, WavError};
 #[cfg(test)]
 use crate::header::FmtFields;
+#[cfg(feature = "adpcm")]
 use crate::header::SampleCodec;
 use crate::source::ByteSource;
 

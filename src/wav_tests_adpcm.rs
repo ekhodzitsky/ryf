@@ -1,6 +1,8 @@
 use super::*;
+#[cfg(feature = "adpcm")]
 use crate::ChannelMode;
 use crate::error::Result;
+#[cfg(feature = "adpcm")]
 use crate::source::ByteSource;
 
 #[cfg(feature = "adpcm")]

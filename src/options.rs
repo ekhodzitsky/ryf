@@ -30,6 +30,8 @@ pub struct DecodeOptions {
     /// Optional caller label (path / upload id). Stored on the options;
     /// not interpolated into [`crate::WavError`] messages.
     pub source_label: Option<String>,
+    /// How to read WAVE tag `0x0064` (mmreg G.726 name, Asterisk G.722).
+    pub tag_0064: crate::g726::Tag0064,
 }
 
 impl Default for DecodeOptions {
@@ -48,6 +50,7 @@ impl DecodeOptions {
             max_decode_sample_rate: DEFAULT_MAX_DECODE_SAMPLE_RATE,
             max_output_bytes: DEFAULT_MAX_OUTPUT_BYTES,
             source_label: None,
+            tag_0064: crate::g726::Tag0064::Auto,
         }
     }
 
@@ -64,6 +67,7 @@ impl DecodeOptions {
             max_decode_sample_rate: 192_000,
             max_output_bytes: u64::MAX / 2,
             source_label: None,
+            tag_0064: crate::g726::Tag0064::Auto,
         }
     }
 
@@ -100,6 +104,13 @@ impl DecodeOptions {
     #[inline]
     pub fn with_max_output_bytes(mut self, bytes: u64) -> Self {
         self.max_output_bytes = bytes;
+        self
+    }
+
+    /// Classification of WAVE tag `0x0064`. See [`crate::Tag0064`].
+    #[inline]
+    pub fn with_tag_0064(mut self, policy: crate::g726::Tag0064) -> Self {
+        self.tag_0064 = policy;
         self
     }
 

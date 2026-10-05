@@ -13,6 +13,9 @@ use crate::error::{Result, WavError};
 use crate::header::SampleCodec;
 use crate::source::ByteSource;
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 pub(super) fn pull_mono_s16<F>(
     mss: &mut ByteSource<'_>,
     total_frames: usize,
@@ -129,6 +132,13 @@ where
     Ok(decoded)
 }
 
+// Test-only entry count so a streaming test can see this arm ran.
+#[cfg(test)]
+pub(super) fn pull_mono_f32_hits() -> &'static AtomicUsize {
+    static HITS: AtomicUsize = AtomicUsize::new(0);
+    &HITS
+}
+
 pub(super) fn pull_mono_f32<F>(
     mss: &mut ByteSource<'_>,
     total_frames: usize,
@@ -139,6 +149,9 @@ pub(super) fn pull_mono_f32<F>(
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
+    #[cfg(test)]
+    pull_mono_f32_hits().fetch_add(1, Ordering::Relaxed);
+
     let block_frames = scratch_frames(4, total_frames);
     let check = need_duration_check(total_frames, max_samples);
     let mut f32b = vec![0.0f32; block_frames];

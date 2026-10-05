@@ -1,8 +1,10 @@
 use super::*;
-use crate::error::WavError;
+use crate::error::{FormatKind, WavError};
 use crate::header::ProbeCodec;
 use crate::source::ByteSource;
-use crate::{ChannelMode, DecodeOptions, decode_bytes, decode_streaming, decode_with, probe};
+use crate::{
+    ChannelMode, DecodeOptions, decode_bytes, decode_streaming, decode_with, probe, probe_with,
+};
 
 fn wrap_g722(raw: &[u8], tag: u16, rate: u32, channels: u16) -> Vec<u8> {
     let data_len = raw.len() as u32;
@@ -286,6 +288,54 @@ fn ffmpeg_g722_wav_matches() -> crate::Result<()> {
         );
     }
     Ok(())
+}
+
+#[test]
+fn g722_header_8000_ceiling_is_output_rate() -> crate::Result<()> {
+    let wav = wrap_g722(&[0u8; 4], 0x0064, 8_000, 1);
+    let open = probe(&mut ByteSource::from_slice(&wav))?;
+    assert_eq!(open.codec, ProbeCodec::G722);
+    assert_eq!(open.sample_rate, 16_000);
+    let decoded = decode_bytes(&wav, DecodeOptions::default())?;
+    assert_eq!(decoded.sample_rate, 16_000);
+    assert_eq!(decoded.frames(), 8);
+    assert_eq!(open.declared_frames, Some(decoded.frames() as u64));
+
+    let opts = DecodeOptions::default().with_max_sample_rate(8_000);
+    for tag in [0x0064u16, 0x0065, 0x028F] {
+        let wav = wrap_g722(&[0u8; 4], tag, 8_000, 1);
+        assert!(matches!(
+            probe_with(&mut ByteSource::from_slice(&wav), &opts),
+            Err(WavError::UnsupportedSampleRate {
+                rate: 16_000,
+                max: 8_000
+            })
+        ));
+        assert!(matches!(
+            decode_bytes(&wav, opts.clone()),
+            Err(WavError::UnsupportedSampleRate {
+                rate: 16_000,
+                max: 8_000
+            })
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn ambiguous_tag_0064_probe_and_decode() {
+    let mut wav = wrap_g722(&[0u8; 4], 0x0064, 8_000, 1);
+    // 4000 is not 8000 * channels, so Auto does not treat this as G.722.
+    wav[28..32].copy_from_slice(&4_000u32.to_le_bytes());
+    let opts = DecodeOptions::default();
+    assert!(matches!(
+        probe_with(&mut ByteSource::from_slice(&wav), &opts),
+        Err(WavError::Format(FormatKind::AmbiguousCodec))
+    ));
+    assert!(matches!(
+        decode_bytes(&wav, opts),
+        Err(WavError::Format(FormatKind::AmbiguousCodec))
+    ));
 }
 
 fn ffmpeg_available() -> bool {

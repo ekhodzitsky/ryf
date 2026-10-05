@@ -9,7 +9,10 @@ use crate::ChannelMode;
 use crate::error::{FormatKind, Result, WavError};
 use crate::header::{self, SampleCodec, parse_header};
 use crate::options::DecodeOptions;
-use crate::pull::{adpcm_frames_capped, decode_collect, ensure_adpcm_enabled, open_decode};
+use crate::pull::{
+    adpcm_frames_capped, codec_gate, decode_collect, ensure_adpcm_enabled, framed_count,
+    open_decode,
+};
 use crate::source::ByteSource;
 
 pub use crate::convert::convert_s16_le_to_f32;
@@ -24,7 +27,7 @@ pub use crate::pull::{StreamBlock, StreamInfo, decode_streaming};
 #[non_exhaustive]
 pub struct DecodedWav {
     /// Native PCM rate (Hz). G.722 is always 16 kHz, even if `fmt ` differs.
-    /// GSM keeps the `fmt ` rate (8 kHz on wav49).
+    /// G.726 is always 8000 Hz. GSM keeps the `fmt ` rate (8 kHz on wav49).
     pub sample_rate: u32,
     /// Planar `f32`. Length 1 if mixed; otherwise one vec per channel.
     pub channels: Vec<Vec<f32>>,
@@ -48,11 +51,12 @@ impl DecodedWav {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct WavProbe {
-    /// Native PCM rate (Hz). G.722 is always 16 kHz; GSM keeps `fmt `.
+    /// Native PCM rate (Hz). G.722 is always 16 kHz. G.726 is always
+    /// 8000 Hz. GSM keeps `fmt `.
     pub sample_rate: u32,
     pub channels: usize,
     /// Container bytes per sample of one channel (G.722: 1 encoded byte;
-    /// GSM: 65-byte MS-GSM block).
+    /// G.726: 1, not the codeword width; GSM: 65-byte MS-GSM block).
     pub sample_width: usize,
     pub codec: ProbeCodec,
     /// Declared PCM frames from the data chunk, when known.
@@ -126,18 +130,8 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
 }
 
 fn probe_inner(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProbe> {
-    let header = parse_header(mss)?;
-    let header_rate = header.fmt.sample_rate;
-    if header_rate == 0 || header_rate > opts.max_sample_rate {
-        return Err(WavError::sample_rate(header_rate, opts.max_sample_rate));
-    }
-    if matches!(header.fmt.codec, SampleCodec::Unsupported) {
-        return Err(WavError::unsupported_codec(header.fmt.format_tag));
-    }
-    let sample_rate = crate::g722::output_rate(header.fmt.codec, header_rate);
-    if sample_rate > opts.max_sample_rate {
-        return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
-    }
+    let mut header = parse_header(mss)?;
+    let sample_rate = codec_gate(&mut header.fmt, opts)?;
     if header.fmt.codec.is_adpcm() {
         ensure_adpcm_enabled()?;
     }
@@ -152,23 +146,10 @@ fn probe_inner(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProb
         ),
         None => mss.byte_len().map(|n| n.saturating_sub(header.data_pos)),
     };
-    let declared_frames = if header.fmt.codec == SampleCodec::G722 {
-        match data_len {
-            Some(d) => Some(crate::g722::pcm_frames_capped(
-                d,
-                header.fmt.channels,
-                header.declared_sample_count,
-            )),
-            None => header.declared_sample_count,
-        }
-    } else if header.fmt.codec == SampleCodec::Gsm {
-        match data_len {
-            Some(d) => Some(crate::gsm::pcm_frames_capped(
-                d,
-                header.declared_sample_count,
-            )),
-            None => header.declared_sample_count,
-        }
+    let declared_frames = if let Some((_, frames)) =
+        framed_count(&header.fmt, data_len, header.declared_sample_count)?
+    {
+        frames
     } else if header.fmt.codec.is_adpcm() {
         let (ba, ch, ima) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
             (Some(p), _) => (u64::from(p.block_align), p.channels as u64, false),

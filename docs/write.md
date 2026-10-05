@@ -5,7 +5,7 @@ in `u32`; **RF64** when they do not (or via `encode_rf64` /
 `WavWriter::new_rf64`). G.711 A-law / mu-law write: `encode_alaw` /
 `encode_mulaw`. `WAVEFORMATEXTENSIBLE` PCM/IEEE/G.711: `encode_extensible` /
 `WavWriter::new_extensible`. `encode_extensible` uses RF64 when `u32`
-sizes overflow. No ADPCM / G.722 / GSM encode. Channels `1..=26` (same
+sizes overflow. No ADPCM / G.722 / G.726 / GSM encode. Channels `1..=26` (same
 ceiling as decode). Empty payload is a valid header (44-byte integer PCM,
 58-byte f32 / G.711).
 `WavWriter::new` and `new_extensible` auto-promote to RF64 when the payload

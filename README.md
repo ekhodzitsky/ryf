@@ -7,8 +7,8 @@ WAVE to planar `f32`.
 [![ci](https://github.com/ekhodzitsky/ryf/actions/workflows/ci.yml/badge.svg)](https://github.com/ekhodzitsky/ryf/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE)
 
-A WAVE codec in Rust. Integer PCM, IEEE float, G.711, G.722, GSM, MS/IMA
-ADPCM. RIFF, RIFX, RF64, BW64, Wave64. Wild headers. Output is planar
+A WAVE codec in Rust. Integer PCM, IEEE float, G.711, G.722, G.726, GSM,
+MS/IMA ADPCM. RIFF, RIFX, RF64, BW64, Wave64. Wild headers. Output is planar
 `f32` at the file's native sample rate. Default features pull no crates.
 ffmpeg is a [test oracle](docs/correctness.md), not a runtime dep.
 
@@ -44,8 +44,33 @@ fn main() -> ryf::Result<()> {
 }
 ```
 
-Headerless telephony: `decode_g711`, `decode_g722`, `decode_gsm`.
-Streaming: `decode_streaming`. Write to a path: `write_s16` / `WavWriter`.
+Headerless telephony: `decode_g711`, `decode_g722`, `decode_g726`,
+`decode_gsm`. Streaming: `decode_streaming`. Write to a path: `write_s16`
+/ `WavWriter`.
+
+G.726 is mono, 8000 Hz, 16/24/32/40 kbit/s. The caller names the rate and
+the packing. `Rfc3551` puts the first codeword in the low bits of each
+octet. `Aal2` is the opposite order (WAVE tag `0x0045`).
+
+```rust
+fn main() -> ryf::Result<()> {
+    let pcm = ryf::decode_g726(
+        &[0x00, 0x11],
+        ryf::G726Rate::Kbps32,
+        ryf::G726Packing::Rfc3551,
+        Some(4),
+        &ryf::DecodeOptions::speech(),
+    )?;
+    assert_eq!(pcm.sample_rate, 8_000);
+    assert_eq!(pcm.frames(), 4);
+    Ok(())
+}
+```
+
+Tag `0x0064` stays G.722 when `nAvgBytesPerSec` is `8000 * nChannels`.
+Any other layout of that tag is `FormatKind::AmbiguousCodec` until
+`DecodeOptions::with_tag_0064` selects G.722 or G.726. Details:
+[read](docs/read.md).
 
 ## Decode
 
@@ -55,6 +80,7 @@ Streaming: `decode_streaming`. Write to a path: `write_s16` / `WavWriter`.
 | IEEE f32 / f64 | yes | yes | yes | yes |
 | G.711 A-law / mu-law | yes | yes | yes | yes |
 | G.722 64 kbit/s | yes | yes | yes | yes |
+| G.726 16/24/32/40 kbit/s | yes | yes | yes | yes |
 | GSM 06.10 / wav49 | yes | yes | yes | yes |
 | MS / IMA ADPCM | yes | yes | yes | yes |
 | `WAVEFORMATEXTENSIBLE` | PCM / IEEE / G.711 | PCM / IEEE / G.711 | yes | yes |
@@ -64,7 +90,7 @@ Streaming: `decode_streaming`. Write to a path: `write_s16` / `WavWriter`.
 
 Integer PCM 8/16/24/32, IEEE f32, G.711 A-law / mu-law. Classic RIFF, RF64
 when `u32` sizes overflow, RIFX (`encode_rifx`), `WAVEFORMATEXTENSIBLE`
-(`encode_extensible`). Channels `1..=26`. No ADPCM / G.722 / GSM encode.
+(`encode_extensible`). Channels `1..=26`. No ADPCM / G.722 / G.726 / GSM encode.
 
 ## Compared to hound, Symphonia, dr_wav
 
@@ -78,7 +104,7 @@ Linux x86 SSE: [benchmarks](docs/benchmarks.md). Full matrix:
 | Default deps | none | none | several | none (one `.h`) |
 | RF64 / RIFX / Wave64 | yes | no | limited | RF64 + Wave64 |
 | G.711 / ADPCM | yes | no | G.711 | yes |
-| G.722 / GSM | yes | no | no | no |
+| G.722 / G.726 / GSM | yes | no | no | no |
 | Caps (duration / RAM) | yes | no | no | no |
 | PCM16 decode | **3.78 mus** | 186 mus | 102 mus | 16.3 mus |
 | PCM16 encode | 5.72 mus | 112 mus | no | **5.42 mus** |

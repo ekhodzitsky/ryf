@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- G.726 decode, mono, 8000 Hz, 16/24/32/40 kbit/s. Headerless
+  `decode_g726` / `decode_g726_mono` take `G726Rate`, `G726Packing`
+  (`Rfc3551` or `Aal2`), and an optional sample count. `G726Decoder`
+  keeps the predictor and at most 7 pending bits across `push` calls.
+- WAVE tag `0x0045` (AAL2 packing, the ffmpeg mux tag) on RIFF, RIFX,
+  RF64/BW64, and Wave64. `probe` reports `ProbeCodec::G726`.
+- Tag `0x0064`: `nAvgBytesPerSec == 8000 * nChannels` stays G.722.
+  Any other layout is `FormatKind::AmbiguousCodec` unless
+  `DecodeOptions::with_tag_0064` selects `Tag0064::G722` or
+  `Tag0064::G726 { packing }`.
+
 ### Changed
 
 - Linux x86_64 SSE Criterion numbers in [benchmarks.md](docs/benchmarks.md)

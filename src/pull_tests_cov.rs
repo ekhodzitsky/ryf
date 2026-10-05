@@ -23,6 +23,8 @@ fn pcm_fields(codec: SampleCodec, ch: usize, width: usize) -> crate::header::Fmt
         adpcm_ima: None,
         big_endian: false,
         format_tag: 1,
+        g726: None,
+        tag0064: None,
     }
 }
 
@@ -315,9 +317,13 @@ fn adpcm_helpers_missing_params_and_wrong_codec() {
         decode_adpcm_interleaved(&mut ByteSource::from_slice(&[]), &missing_ima, 0, 10).is_err()
     );
     let p = plan(SampleCodec::S16, 1, 2, 0, 10, ChannelMode::Mono);
+    let err = super::super::adpcm::collect_adpcm(&mut ByteSource::from_slice(&[]), &p);
+    #[cfg(feature = "adpcm")]
+    assert!(matches!(err, Err(WavError::UnsupportedCodec { .. })));
+    #[cfg(not(feature = "adpcm"))]
     assert!(matches!(
-        super::super::adpcm::collect_adpcm(&mut ByteSource::from_slice(&[]), &p),
-        Err(WavError::UnsupportedCodec { .. })
+        err,
+        Err(WavError::FeatureDisabled { feature: "adpcm" })
     ));
 }
 

@@ -8,7 +8,8 @@ Every listed codec is accepted in every listed container unless noted.
 | S24 in 4-byte containers | yes | yes | yes | yes |
 | IEEE f32 / f64 | yes | yes | yes | yes |
 | G.711 A-law / mu-law | yes | yes | yes | yes |
-| G.722 64 kbit/s only (tags `0x0064` / `0x0065` / `0x028F`) | yes | yes | yes | yes |
+| G.722 64 kbit/s only (tags `0x0065` / `0x028F`, and `0x0064` at 64 kbit/s) | yes | yes | yes | yes |
+| G.726 16/24/32/40 kbit/s, mono, 8000 Hz (tag `0x0045`, AAL2) | yes | yes | yes | yes |
 | GSM 06.10 / wav49 (`0x0031`, 65-byte blocks) | yes | yes | yes | yes |
 | MS-ADPCM, IMA/DVI ADPCM | yes | yes | yes | yes |
 
@@ -33,9 +34,43 @@ Headerless G.711 (rate and channel count stated by the caller):
 
 Headerless G.722 (**64 kbit/s only**; `sample_rate` 8000 or 16000, output
 always 16 kHz): `decode_g722` / `decode_g722_mono`. 56/48 kbit/s packed
-streams are not decoded. WAVE G.722 always reports 16 kHz (SDP `fmt ` 8000
-or any other accepted header rate). `0x0064` is the Asterisk/SBC alias
-(mmreg lists that tag as G.726).
+streams are not decoded. WAVE G.722 always reports 16 kHz. Tags `0x0065`
+and `0x028F` are G.722. Tag `0x0064` is the Asterisk/SBC alias (mmreg
+lists that tag as G.726). `Tag0064::Auto` (the default) keeps it on the
+G.722 path when `nAvgBytesPerSec == 8000 * nChannels`. Any other `0x0064`
+layout is `FormatKind::AmbiguousCodec`. `DecodeOptions::with_tag_0064`
+selects `Tag0064::G722` or `Tag0064::G726 { packing }`. The tag stores no
+packing. A forced G.726 read is mono, 8000 Hz. The bitrate is
+`wBitsPerSample` when that is 2, 3, 4, or 5, otherwise the byte rate when
+that is 2, 3, 4, or 5 bits per sample. The two must agree when both are
+present.
+
+Headerless G.726 (mono, 8000 Hz, 16/24/32/40 kbit/s): `decode_g726` /
+`decode_g726_mono`. Arguments are `G726Rate`, `G726Packing`, and an
+optional sample count. `Rfc3551` puts the first codeword in the least
+significant bits (RFC 3551 section 4.5.4; ffmpeg `g726le`). `Aal2` is the
+opposite order (ITU-T I.366.2 Annex E; ffmpeg `g726`). The payload does
+not select the rate or the packing. Empty input is `WavError::Empty`.
+`None` decodes every complete codeword and rejects a trailing partial
+codeword (`InvalidSize`). `Some(n)` emits `n` samples and ignores the
+rest, including later complete codewords; `n == 0` or `n` past the
+complete codewords is `InvalidSize`. `f32` samples are the 16-bit linear
+PCM values times `1/32768`.
+
+WAVE tag `0x0045` is G.726 with AAL2 packing (ffmpeg). Mono, 8000 Hz,
+`wBitsPerSample` 2/3/4/5, `nBlockAlign` a positive multiple of the byte
+quantum (1, 3, 1, 5 for 16/24/32/40 kbit/s). The data chunk is one
+codeword stream. This tag does not consult `Tag0064`. Antex tags
+`0x0014` and `0x0040` are not decoded. `probe` reports `ProbeCodec::G726`,
+8000 Hz, and `sample_width` 1 (that field is not the codeword width).
+
+`G726Decoder` keeps the predictor and at most 7 unused input bits.
+`push` writes into the caller buffer and does not allocate. `finish`
+drops a partial codeword without touching the predictor. `reset` restores
+the initial predictor and an empty bit buffer. WAVE streaming reads a
+fixed scratch window, not the whole compressed file. Duration, sample-rate,
+and output-byte caps apply to headerless decode and to WAVE collect and
+streaming.
 
 Headerless Microsoft GSM 06.10 / wav49 (`sample_rate` 8000, 65-byte
 blocks): `decode_gsm` / `decode_gsm_mono`. WAVE tag `0x0031`. Output keeps
@@ -52,4 +87,4 @@ defaults) / `probe_with`. Sniff: `sniff_wav`.
 
 `decode_bytes` / `read` of an empty `data` chunk return 0 frames (one
 empty plane if mixed). `decode_f32` / `decode_s16` / headerless G.711 /
-G.722 / GSM return `WavError::Empty`.
+G.722 / G.726 / GSM return `WavError::Empty`.

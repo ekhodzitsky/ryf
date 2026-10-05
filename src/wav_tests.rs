@@ -44,6 +44,7 @@ mod oracle;
 #[path = "wav_tests_seed.rs"]
 mod seed;
 
+#[cfg(feature = "adpcm")]
 pub(crate) use adpcm::adpcm_fixture;
 pub(crate) use builders::*;
 pub(crate) use oracle::*;

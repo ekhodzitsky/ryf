@@ -29,6 +29,10 @@ pub enum FormatKind {
     Adpcm,
     /// API misuse (finalized writer, missing plane, bad callback).
     InvalidOperation,
+    /// WAVE tag `0x0064` is neither the 64 kbit/s G.722 signature nor a
+    /// G.726 layout with a caller-selected packing. Set
+    /// [`crate::DecodeOptions::with_tag_0064`].
+    AmbiguousCodec,
 }
 
 impl fmt::Display for FormatKind {
@@ -43,6 +47,9 @@ impl fmt::Display for FormatKind {
             Self::UnsupportedWaveFormat => "unsupported WAVE format layout",
             Self::Adpcm => "malformed ADPCM block or fmt extra",
             Self::InvalidOperation => "invalid WAVE operation",
+            Self::AmbiguousCodec => {
+                "ambiguous format tag 0x0064 (G.722 or G.726); set DecodeOptions::with_tag_0064"
+            }
         })
     }
 }

@@ -1,4 +1,4 @@
-//! `fmt ` chunk body (PCM / IEEE / G.711 / G.722 / GSM / ADPCM / EXTENSIBLE).
+//! `fmt ` chunk body (PCM / IEEE / G.711 / G.722 / G.726 / GSM / ADPCM / EXTENSIBLE).
 
 use super::riff::{eof_trunc, read_u16_endian, read_u32_endian};
 use super::{
@@ -6,9 +6,9 @@ use super::{
     KSDATAFORMAT_SUBTYPE_AMBISONIC_PCM, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
     KSDATAFORMAT_SUBTYPE_MULAW, KSDATAFORMAT_SUBTYPE_PCM, SampleCodec, WAVE_FORMAT_ADPCM_G722,
     WAVE_FORMAT_ADPCM_IMA, WAVE_FORMAT_ADPCM_MS, WAVE_FORMAT_ALAW, WAVE_FORMAT_EXTENSIBLE,
-    WAVE_FORMAT_G722_ADPCM, WAVE_FORMAT_G722_ASTERISK, WAVE_FORMAT_GSM610, WAVE_FORMAT_IEEE_FLOAT,
-    WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width, map_ambisonic_channel_count,
-    map_wave_channel_count, pcm_codec_for,
+    WAVE_FORMAT_G722_ADPCM, WAVE_FORMAT_G722_ASTERISK, WAVE_FORMAT_G726, WAVE_FORMAT_GSM610,
+    WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_MULAW, WAVE_FORMAT_PCM, container_width,
+    map_ambisonic_channel_count, map_wave_channel_count, pcm_codec_for,
 };
 use crate::error::{FormatKind, Result, WavError};
 use crate::gsm::MS_BLOCK;
@@ -56,7 +56,7 @@ pub(super) fn parse_fmt_chunk(
     let format = read_u16_endian(mss, big_endian)?;
     let num_channels = read_u16_endian(mss, big_endian)?;
     let sample_rate = read_u32_endian(mss, big_endian)?;
-    let _avg_bytes_per_sec = read_u32_endian(mss, big_endian)?;
+    let byte_rate = read_u32_endian(mss, big_endian)?;
     let block_align = read_u16_endian(mss, big_endian)?;
     let bits_per_sample = read_u16_endian(mss, big_endian)?;
 
@@ -77,6 +77,8 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ima: None,
                 big_endian,
                 format_tag: format,
+                g726: None,
+                tag0064: None,
             })
         }
         WAVE_FORMAT_IEEE_FLOAT => {
@@ -104,14 +106,11 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ima: None,
                 big_endian,
                 format_tag: format,
+                g726: None,
+                tag0064: None,
             })
         }
-        WAVE_FORMAT_ALAW
-        | WAVE_FORMAT_MULAW
-        | WAVE_FORMAT_G722_ASTERISK
-        | WAVE_FORMAT_G722_ADPCM
-        | WAVE_FORMAT_ADPCM_G722 => {
-            // G.711 / G.722: canonical is 18; accept 16 and longer wild sizes.
+        WAVE_FORMAT_ALAW | WAVE_FORMAT_MULAW | WAVE_FORMAT_G722_ADPCM | WAVE_FORMAT_ADPCM_G722 => {
             skip_fmt_extra(mss, chunk_len, big_endian)?;
             let codec = match format {
                 WAVE_FORMAT_ALAW => SampleCodec::ALaw,
@@ -128,7 +127,34 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ima: None,
                 big_endian,
                 format_tag: format,
+                g726: None,
+                tag0064: None,
             })
+        }
+        WAVE_FORMAT_G726 => {
+            skip_fmt_extra(mss, chunk_len, big_endian)?;
+            let channels = map_wave_channel_count(num_channels)?;
+            crate::g726::fmt_fixed(
+                channels,
+                sample_rate,
+                byte_rate,
+                block_align,
+                bits_per_sample,
+                big_endian,
+                format,
+            )
+        }
+        WAVE_FORMAT_G722_ASTERISK => {
+            skip_fmt_extra(mss, chunk_len, big_endian)?;
+            let channels = map_wave_channel_count(num_channels)?;
+            crate::g726::fmt_tag_0064(
+                channels,
+                sample_rate,
+                byte_rate,
+                block_align,
+                bits_per_sample,
+                big_endian,
+            )
         }
         WAVE_FORMAT_GSM610 => {
             let channels = map_wave_channel_count(num_channels)?;
@@ -153,6 +179,8 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ima: None,
                 big_endian,
                 format_tag: format,
+                g726: None,
+                tag0064: None,
             })
         }
         WAVE_FORMAT_ADPCM_MS | WAVE_FORMAT_ADPCM_IMA => {
@@ -213,6 +241,8 @@ pub(super) fn parse_fmt_chunk(
                     adpcm_ima: None,
                     big_endian,
                     format_tag: format,
+                    g726: None,
+                    tag0064: None,
                 })
             } else {
                 // WAVE_FORMAT_ADPCM_IMA - outer match is MS | IMA.
@@ -239,6 +269,8 @@ pub(super) fn parse_fmt_chunk(
                     }),
                     big_endian,
                     format_tag: format,
+                    g726: None,
+                    tag0064: None,
                 })
             }
         }
@@ -355,6 +387,8 @@ pub(super) fn parse_fmt_chunk(
                 adpcm_ima: None,
                 big_endian,
                 format_tag: format,
+                g726: None,
+                tag0064: None,
             })
         }
         _ => Err(WavError::unsupported_codec(format)),
