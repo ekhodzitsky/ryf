@@ -81,8 +81,9 @@ are temporary and excluded from normal tests and git.
 
 The portable check executes public conversions and all four writable
 containers with 1, 2, 3 and 26 channels, scalar/SIMD comparisons, ADPCM fixtures
-and every PCM16 conversion value. Its 32-bit regression checks an oversized
-collect request without allocating its requested output. QEMU execution
+and every PCM16 conversion value. Its 32-bit regressions check an oversized
+collect request and bounded streaming from an 8 GiB virtual source, without
+allocating the whole input or output. QEMU execution
 checks semantics, not native hardware timing or complete OS behavior.
 
 Bounded sanitizer fuzz campaigns and Miri complement the regression suite.

@@ -80,12 +80,71 @@ fn check_large_collect_capacity() -> Result<(), Box<dyn std::error::Error>> {
     let mut header = ryf::encode_s16(&[], 8000)?;
     header[4..8].fill(0);
     header[40..44].copy_from_slice(&(1u32 << 30).to_le_bytes());
-    let mut source =
-        ByteSource::from_read_seek(std::io::Cursor::new(header), Some((1u64 << 30) + 44));
+    let mut source = virtual_source(header, (1u64 << 30) + 44)?;
     let options = DecodeOptions::default().with_max_duration_secs(1_000_000.0);
     assert!(matches!(
         ryf::decode_with(&mut source, &options),
         Err(ryf::WavError::OutputTooLarge { .. })
     ));
+    std::io::Seek::rewind(&mut source)?;
+    stop_after_first_block(&mut source, &options)?;
+    // An 8 GiB interleaved extent must not be multiplied in 32-bit usize.
+    let mut header = ryf::encode(WriteSpec::s16(8000, 26), &[])?;
+    header[4..8].fill(0);
+    header[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+    let mut source = virtual_source(header, 8u64 << 30)?;
+    stop_after_first_block(&mut source, &options.with_channel_mode(ChannelMode::Mono))?;
     Ok(())
+}
+
+#[cfg(target_pointer_width = "32")]
+fn stop_after_first_block(source: &mut ByteSource<'_>, options: &DecodeOptions) -> ryf::Result<()> {
+    let result = ryf::decode_streaming(source, options, |block| {
+        assert!(block.frames > 0 && block.frames <= 131072);
+        Err(ryf::WavError::Empty)
+    });
+    assert!(matches!(result, Err(ryf::WavError::Empty)));
+    assert!(source.pos() < 300000);
+    Ok(())
+}
+
+#[cfg(target_pointer_width = "32")]
+fn virtual_source(header: Vec<u8>, length: u64) -> std::io::Result<ByteSource<'static>> {
+    struct VirtualWave {
+        header: Vec<u8>,
+        position: u64,
+        length: u64,
+    }
+    impl std::io::Read for VirtualWave {
+        fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+            let n = (bytes.len() as u64).min(self.length.saturating_sub(self.position)) as usize;
+            bytes[..n].fill(0);
+            if self.position < self.header.len() as u64 {
+                let start = self.position as usize;
+                let count = n.min(self.header.len() - start);
+                bytes[..count].copy_from_slice(&self.header[start..start + count]);
+            }
+            self.position += n as u64;
+            Ok(n)
+        }
+    }
+    impl std::io::Seek for VirtualWave {
+        fn seek(&mut self, offset: std::io::SeekFrom) -> std::io::Result<u64> {
+            let next = match offset {
+                std::io::SeekFrom::Start(n) => i128::from(n),
+                std::io::SeekFrom::Current(n) => i128::from(self.position) + i128::from(n),
+                std::io::SeekFrom::End(n) => i128::from(self.length) + i128::from(n),
+            };
+            self.position = u64::try_from(next).map_err(|_| std::io::ErrorKind::InvalidInput)?;
+            Ok(self.position)
+        }
+    }
+    ByteSource::try_from_read_seek(
+        VirtualWave {
+            header,
+            position: 0,
+            length,
+        },
+        Some(length),
+    )
 }
