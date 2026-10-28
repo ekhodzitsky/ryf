@@ -118,7 +118,7 @@ pub(crate) fn for_each_ms_adpcm_block(
     let mut block_buf = vec![0u8; block];
     let mut frames = 0usize;
 
-    while remaining >= block as u64 {
+    while frames < target && remaining >= block as u64 {
         mss.read_buf_exact(&mut block_buf)
             .map_err(WavError::packet_io)?;
         remaining -= block as u64;

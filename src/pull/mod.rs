@@ -46,23 +46,14 @@ pub(crate) fn check_duration(
     max_samples: usize,
     sample_rate: u32,
 ) -> Result<()> {
-    if decoded_frames > max_samples {
-        let rate = sample_rate.max(1) as f64;
-        let observed_s = decoded_frames as f64 / rate;
-        let max_secs = max_samples as f64 / rate;
-        return Err(WavError::too_long(observed_s, max_secs));
-    }
-    Ok(())
+    reject_too_many_frames(decoded_frames as u64, sample_rate, max_samples)
 }
 
-fn reject_too_many_frames(
-    frames: u64,
-    sample_rate: u32,
-    max_samples: usize,
-    max_secs: f64,
-) -> Result<()> {
+fn reject_too_many_frames(frames: u64, sample_rate: u32, max_samples: usize) -> Result<()> {
     if frames > max_samples as u64 {
-        let observed_s = frames as f64 / sample_rate.max(1) as f64;
+        let rate = f64::from(sample_rate.max(1));
+        let observed_s = frames as f64 / rate;
+        let max_secs = max_samples as f64 / rate;
         return Err(WavError::too_long(observed_s, max_secs));
     }
     Ok(())
@@ -119,7 +110,6 @@ pub(crate) struct DecodePlan {
 
 pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<DecodePlan> {
     let mode = opts.channel_mode;
-    let max_secs = opts.max_duration_secs;
     let mut header = parse_header(mss)?;
     let sample_rate = gate::codec_gate(&mut header.fmt, opts)?;
 
@@ -133,7 +123,7 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
     let (frame_bytes, count) =
         gate::frame_layout(&header.fmt, Some(data_len), header.declared_sample_count)?;
     let count = count.ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
-    reject_too_many_frames(count, sample_rate, max_samples, max_secs)?;
+    reject_too_many_frames(count, sample_rate, max_samples)?;
     let total_frames =
         usize::try_from(count).map_err(|_| WavError::format(FormatKind::InvalidSize))?;
 

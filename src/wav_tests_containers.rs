@@ -199,9 +199,25 @@ fn test_diff_riff_size_zero_and_first_fmt() -> Result<()> {
         ..WavBuilder::new(TestCodec::S16)
     }
     .build();
-    let own = own_mono_native(&two)?;
-    assert_eq!(own.0, 16_000);
     assert_bit_exact_both_modes("first fmt wins", &two);
+    Ok(())
+}
+
+#[test]
+fn first_fmt_rate_wins_without_external_oracle() -> Result<()> {
+    let second_fmt = WavBuilder {
+        sample_rate: 8_000,
+        ..WavBuilder::new(TestCodec::S16)
+    }
+    .fmt_body();
+    let wav = WavBuilder {
+        sample_rate: 16_000,
+        chunks_before_data: vec![(*b"fmt ", second_fmt)],
+        payload: vec![0; 8],
+        ..WavBuilder::new(TestCodec::S16)
+    }
+    .build();
+    assert_eq!(own_mono_native(&wav)?.0, 16_000);
     Ok(())
 }
 

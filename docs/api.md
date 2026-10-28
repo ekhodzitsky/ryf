@@ -36,9 +36,11 @@ helpers: `f32_to_s16le` / `s16le_to_f32`.
 | Frame-budget rate | 48 kHz | 192 kHz |
 
 The RAM cap counts logical planar output bytes. It does not bound peak RSS,
-allocator capacity, compressed input, scratch buffers, or `decode_reader`
-input buffering. Collect paths use bounded conversion scratch alongside the
-final output; streaming avoids allocating the whole output.
+allocator capacity or scratch. `decode_reader` separately limits input to
+`max_output_bytes + 1 MiB` and reads at most one extra byte to detect overflow.
+That input limit can reject a large file whose mixed output fits the planar
+budget. Collect paths use bounded conversion scratch alongside the final
+output; streaming avoids allocating the whole output.
 
 `unbounded` still uses a finite rate when sizing the frame budget so a
 corrupt header cannot request petabytes from one multiply.

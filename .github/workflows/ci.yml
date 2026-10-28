@@ -23,6 +23,7 @@ jobs:
           toolchain: "1.88.0"
           components: rustfmt, clippy
       - run: cargo fmt --check
+      - run: rustfmt --edition 2024 --check tools/portable.rs tools/fuzz/*.rs
       - run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
 
   test:
@@ -103,6 +104,9 @@ jobs:
       - run: cargo miri test --lib custom_adpcm_coefficients_do_not_overflow
       - run: cargo miri test --lib writer_failure_is_terminal_and_drop_does_not_mutate
       - run: cargo miri test --lib collect_cursor_short_and_duration
+      - run: cargo miri test --lib adpcm_fact_boundaries_do_not_read_discarded_blocks
+      - run: cargo miri test --lib duration_errors_use_the_effective_frame_budget
+      - run: cargo miri test --lib first_fmt_rate_wins_without_external_oracle
 
   portable:
     runs-on: ubuntu-latest
@@ -127,3 +131,12 @@ jobs:
           targets: ${{ matrix.target }}
       - run: sudo apt-get update && sudo apt-get install -y qemu-user
       - run: sh tools/check-portable.sh ${{ matrix.target }}
+
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - run: sh tools/check-fuzz.sh containers 10
+      - run: sh tools/check-fuzz.sh adpcm 10

@@ -232,10 +232,7 @@ fn decode_frames(
         None => complete,
     };
     let max_samples = opts.max_frames(RATE);
-    if frames > max_samples {
-        let observed = frames as f64 / f64::from(RATE);
-        return Err(WavError::too_long(observed, opts.max_duration_secs));
-    }
+    crate::pull::check_duration(frames, max_samples, RATE)?;
     let out_bytes = (frames as u64).saturating_mul(4);
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));

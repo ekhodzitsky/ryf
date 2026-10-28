@@ -40,10 +40,7 @@ pub fn decode_g711(
     }
     let frames = data.len() / ch;
     let max_samples = opts.max_frames(sample_rate);
-    if frames > max_samples {
-        let observed = frames as f64 / f64::from(sample_rate.max(1));
-        return Err(WavError::too_long(observed, opts.max_duration_secs));
-    }
+    crate::pull::check_duration(frames, max_samples, sample_rate)?;
     let n_out = match opts.channel_mode {
         ChannelMode::Mono => 1,
         ChannelMode::Split => ch,

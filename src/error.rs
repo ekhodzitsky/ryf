@@ -82,7 +82,8 @@ pub enum WavError {
     },
     /// Sample rate is zero or above the configured ceiling.
     UnsupportedSampleRate { rate: u32, max: u32 },
-    /// Decoded (or declared) duration exceeds the configured budget.
+    /// Duration exceeds the effective frame budget. Both fields use native
+    /// output seconds; `max_secs` includes the decode-rate ceiling and rounding.
     TooLong { observed_secs: f64, max_secs: f64 },
     /// Output exceeds the configured budget, or one allocation exceeds the
     /// platform's isize byte limit. `max` reports the limit that was exceeded.

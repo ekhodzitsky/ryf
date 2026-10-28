@@ -9,11 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop MS/IMA ADPCM before reading another block when `fact` ends exactly
+  at a block boundary, including discarded malformed or unreadable tails.
+- Report `TooLong` duration fields on the same native-output time basis,
+  accounting for the effective rate ceiling and fractional-frame rounding.
+- Document the separate `decode_reader` input ceiling and preserve an
+  independent first-`fmt ` policy assertion under Miri.
+
 - Reject collect allocations exceeding the platform's `isize` byte limit
   with `OutputTooLarge`, including 32-bit large-file decode, without
   restricting bounded streaming of the same files.
 
 ### Added
+
+- Reproducible optional ASan fuzz targets, deterministic seed setup and a
+  CI smoke gate, including ADPCM `fact` boundary and suffix invariants.
 
 - Opt-in real-file 4 GiB promotion and partial-relocation failure tests,
   32-bit and ARM/NEON execution checks, and a pre-1.0 API contract review.

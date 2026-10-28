@@ -26,15 +26,22 @@ Duration uses floor(seconds * min(file rate, decode-rate ceiling)), with an
 effective rate of at least 1. Nonpositive or nonfinite duration products
 produce a zero-frame budget. Existing builders remain infallible; changing
 invalid-option handling requires an explicit compatibility decision.
+TooLong expresses both fields in actual output seconds: max_secs is the
+effective frame budget divided by the native output rate. It can therefore
+be smaller than max_duration_secs after the rate ceiling or frame rounding.
 
 max_output_bytes counts logical planar output across channels. Streaming
 enforces this logical budget too, even though it retains only bounded blocks.
 Collect additionally rejects any individual allocation exceeding isize::MAX
 bytes. OutputTooLarge reports the limit exceeded, which can be the platform
 limit rather than the configured budget. Allocator exhaustion below these
-limits is not converted into a recoverable error. decode_reader buffers its
-entire input; its output budget is not an input-byte limit. Raw PCM helpers
-do not accept DecodeOptions.
+limits is not guaranteed to become a recoverable error. decode_reader also
+enforces a separate input ceiling of max_output_bytes + 1 MiB (saturating).
+It buffers at most that ceiling plus one byte and rejects a larger input
+before decoding. OutputTooLarge.max then reports the input ceiling. A large
+multichannel input can exceed it even when mixed output fits the planar
+budget; decode_bytes and seekable sources do not have this input ceiling.
+Raw PCM helpers do not accept DecodeOptions.
 
 Match typed errors and their fields rather than parsing Display strings.
 UnexpectedEof during packet reads is Format(Truncated); other transport
