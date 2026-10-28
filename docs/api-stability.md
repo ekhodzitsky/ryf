@@ -86,7 +86,8 @@ collect request without allocating its requested output. QEMU execution
 checks semantics, not native hardware timing or complete OS behavior.
 
 Bounded sanitizer fuzz campaigns and Miri complement the regression suite.
-Neither is a proof of all inputs. Native ARM hardware, big-endian execution,
-allocator-failure injection and a sustained external fuzz service remain
+Neither is a proof of all inputs. Native ARM execution is additionally covered
+by macOS ARM64 CI. Big-endian execution, allocator-failure injection and a
+sustained external fuzz service remain
 additional validation opportunities. Keep the existing API contracts stable
 unless a proposed change has a specific compatibility rationale.
