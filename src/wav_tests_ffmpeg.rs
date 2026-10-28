@@ -117,6 +117,7 @@ fn test_diff_multi_rate() -> Result<()> {
 // --- full-domain sweeps ---
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_u8_full_sweep() -> Result<()> {
     for ext in [false, true] {
         let payload: Vec<u8> = (0..=255).collect();
@@ -213,6 +214,7 @@ fn test_diff_float_random_bit_patterns() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_g711_full_sweep() -> Result<()> {
     for codec in [TestCodec::ALaw, TestCodec::MuLaw] {
         for ext in [false, true] {
@@ -269,6 +271,7 @@ fn test_diff_g711_extensible_valid16() -> Result<()> {
 // --- structural cases: chunks, padding, fmt variants ---
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_odd_size_chunks_and_padding() -> Result<()> {
     let mut rng = XorShift64::new(0x0DD0_0DD0_0DD0_0DD0);
     let payload = gen_payload(TestCodec::S16, &mut rng, 500, 2);
@@ -288,6 +291,7 @@ fn test_diff_odd_size_chunks_and_padding() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_list_info_chunk_skipped() -> Result<()> {
     // Well-formed LIST/INFO with an odd-length sub-chunk (IART, padded).
     let mut info = Vec::new();
@@ -308,6 +312,7 @@ fn test_diff_list_info_chunk_skipped() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_fact_chunk() -> Result<()> {
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(11), 300, 1);
     let wav = WavBuilder {
@@ -330,6 +335,7 @@ fn test_diff_fact_chunk() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_pcm_fmt_len_18_20_and_40() -> Result<()> {
     for pcm_fmt_len in [18u32, 20, 40] {
         let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(13), 300, 1);
@@ -345,6 +351,7 @@ fn test_diff_pcm_fmt_len_18_20_and_40() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_ieee_fmt_len_18() -> Result<()> {
     // 18-byte IEEE fmt with cbSize = 0 is accepted by both paths.
     let payload = gen_payload(TestCodec::F32, &mut XorShift64::new(17), 300, 1);

@@ -175,6 +175,7 @@ fn test_extensible_valid_bits_zero_fallback() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_riff_size_zero_and_first_fmt() -> Result<()> {
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(5), 64, 1);
     let mut wav = WavBuilder {

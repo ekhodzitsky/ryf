@@ -59,6 +59,7 @@ fn test_diff_extensible_valid_bits() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_extensible_channel_masks() -> Result<()> {
     let cases: &[(&str, u16, Option<u32>, bool)] = &[
         ("mask 0 auto-fix", 2, Some(0), true),
@@ -96,6 +97,7 @@ fn test_diff_extensible_channel_masks() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_extensible_ambisonic() -> Result<()> {
     // Ambisonic B-format extensible GUIDs (WXYZ quad) decode like PCM.
     for (guid, ch) in [
@@ -152,6 +154,7 @@ fn test_diff_zero_length_data() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_declared_data_shorter_than_actual() -> Result<()> {
     // Header declares fewer bytes than present: both decode exactly the
     // declared frames, trailing bytes are never touched.
@@ -220,6 +223,7 @@ fn test_diff_partial_final_frame_dropped() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_streaming_riff_len() -> Result<()> {
     // riff_len = u32::MAX (ffmpeg-to-stdout convention) with an honest
     // data length: both paths decode fine.
@@ -420,6 +424,7 @@ fn test_diff_g711_fmt_len_16_accepted() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_diff_data_before_fmt_pcm() -> Result<()> {
     let payload = gen_payload(TestCodec::S16, &mut XorShift64::new(11), 64, 1);
     let fmt = WavBuilder::new(TestCodec::S16).fmt_body();
