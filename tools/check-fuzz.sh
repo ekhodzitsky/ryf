@@ -38,10 +38,19 @@ doc = false
 bench = false
 EOF
 fuzz_host=$(rustc -vV | sed -n 's/^host: //p')
-cargo build --quiet --lib --target "$fuzz_host" --target-dir "$fuzz_dir/preflight"
-fuzz_lib=$fuzz_dir/preflight/$fuzz_host/debug
-rustc --edition 2024 tools/fuzz/seeds.rs --extern "ryf=$fuzz_lib/libryf.rlib" \
-    -L "dependency=$fuzz_lib/deps" -o "$fuzz_dir/seeds"
-"$fuzz_dir/seeds" "$fuzz_dir/corpus"
+mkdir -p "$fuzz_dir/preflight"
+cat > "$fuzz_dir/preflight/Cargo.toml" <<'EOF'
+[package]
+name = "ryf-fuzz-seeds"
+version = "0.0.0"
+edition = "2024"
+[dependencies]
+ryf = { path = "../../.." }
+[[bin]]
+name = "seeds"
+path = "../../../tools/fuzz/seeds.rs"
+EOF
+cargo run --quiet --manifest-path "$fuzz_dir/preflight/Cargo.toml" \
+    --target "$fuzz_host" --target-dir "$fuzz_dir/preflight/target" -- "$fuzz_dir/corpus"
 cargo +nightly fuzz run "$fuzz_target" --fuzz-dir "$fuzz_dir" -- \
     "-max_total_time=$fuzz_seconds" "-max_len=$fuzz_length" -rss_limit_mb=1024
