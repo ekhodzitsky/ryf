@@ -12,6 +12,7 @@ use crate::source::ByteSource;
 /// Hot paths (mono s16 / mono f32 / mix s16) write straight into one `Vec` and
 /// size scratch to `min(256KiB, file)` so short clips no longer allocate ~768 KiB.
 pub(crate) fn decode_collect(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Result<Vec<Vec<f32>>> {
+    crate::error::check_vec_capacity::<f32>(plan.total_frames)?;
     if plan.fmt.codec.is_adpcm() {
         return super::adpcm::collect_adpcm(mss, plan);
     }

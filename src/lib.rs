@@ -74,3 +74,6 @@ mod writer_failure_tests;
 
 #[cfg(test)]
 mod container_edge_tests;
+
+#[cfg(all(test, not(miri)))]
+mod writer_large_tests;

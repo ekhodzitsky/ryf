@@ -54,6 +54,7 @@ pub fn decode_g711(
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));
     }
+    crate::error::check_vec_capacity::<f32>(frames)?;
     let table = g711_table(matches!(law, G711Law::ALaw));
     let planes = match opts.channel_mode {
         ChannelMode::Mono if ch == 1 => {

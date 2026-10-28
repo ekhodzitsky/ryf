@@ -113,3 +113,17 @@ jobs:
           toolchain: "1.88.0"
           targets: wasm32-unknown-unknown
       - run: cargo check --lib --no-default-features --target wasm32-unknown-unknown
+
+  cross-execution:
+    strategy:
+      matrix:
+        target: [i686-unknown-linux-musl, aarch64-unknown-linux-musl]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          targets: ${{ matrix.target }}
+      - run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - run: sh tools/check-portable.sh ${{ matrix.target }}

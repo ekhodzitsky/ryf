@@ -93,6 +93,7 @@ pub fn decode_g722(
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));
     }
+    crate::error::check_vec_capacity::<f32>(frames)?;
     Ok(DecodedWav {
         sample_rate: RATE,
         channels: decode_planar(data, ch, opts.channel_mode),

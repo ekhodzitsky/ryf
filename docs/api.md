@@ -90,3 +90,7 @@ or fields. `ChannelMode` and `G711Law` stay closed.
 for strict initialization; the original constructors remain best-effort.
 `ByteSource` is exported at the crate root; the `source` module is
 crate-private. Construct `DecodeOptions` / `WriteSpec` with the builders.
+
+The [pre-1.0 contract review](api-stability.md) records error, limit, source
+and writer lifecycle policies. Probe checks metadata and codec/rate support;
+duration and output-byte budgets are enforced when decoding.

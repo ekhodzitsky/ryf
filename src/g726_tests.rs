@@ -85,6 +85,7 @@ fn ffmpeg_pair(pcm: &[i16], codec: &str, bits: u8) -> crate::Result<(Vec<u8>, Ve
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn ffmpeg_i16_matches_all_rates_and_packings() -> crate::Result<()> {
     if !ffmpeg_available() {
         eprintln!("ffmpeg not available, skipping g726 oracle");
@@ -381,7 +382,8 @@ fn tone_reset_matches_ffmpeg() -> crate::Result<()> {
     assert_eq!(pcm.len(), 1_624);
     assert_eq!(pcm, s16le(include_bytes!("../fixtures/g726/reset.s16")));
     let opts = DecodeOptions::unbounded();
-    let ffmpeg = ffmpeg_available();
+    // Miri cannot spawn processes; fixture and decoder-state checks still run.
+    let ffmpeg = !cfg!(miri) && ffmpeg_available();
     let expect = [
         (2u8, G726Rate::Kbps16, 327_515, 1_308),
         (5, G726Rate::Kbps40, 323_211, 1_305),

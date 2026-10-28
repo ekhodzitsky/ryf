@@ -36,3 +36,34 @@ cargo llvm-cov --lib --ignore-filename-regex '_tests|proptest' --summary-only --
 cargo bench --bench wav
 cargo bench --bench wav --features bench-c   # vs dr_wav; needs a C compiler
 ```
+
+Real disk boundary tests are opt-in and require 5 GiB free on the filesystem
+containing target. They write ordinary files, verify all payload bytes and
+delete their temporary files when finished. Run sequentially:
+
+```sh
+cargo test --release real_riff_and_extensible_cross_4gib -- --ignored
+cargo test --release real_boundary_partial_relocation_is_terminal -- --ignored
+```
+
+The full Miri-compatible library suite needs filesystem access. External
+ffmpeg oracle tests are explicitly ignored under Miri; the G.726 tone test
+still checks its fixtures and predictor counters without spawning ffmpeg.
+
+```sh
+MIRIFLAGS=-Zmiri-disable-isolation cargo +nightly miri test --lib
+```
+
+Cross-target execution uses a temporary manifest under target so benchmark
+competitors and their native build dependencies need not cross-compile.
+Install the Rust musl targets and QEMU user emulators, then compare scalar
+and SIMD outputs using the checked-in public API exercise:
+
+```sh
+rustup target add i686-unknown-linux-musl aarch64-unknown-linux-musl
+sh tools/check-portable.sh i686-unknown-linux-musl
+sh tools/check-portable.sh aarch64-unknown-linux-musl
+```
+
+These checks also run in CI. See the [API review](api-stability.md) for
+contracts and the limits of these experiments.

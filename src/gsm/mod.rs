@@ -57,6 +57,7 @@ pub fn decode_gsm(data: &[u8], sample_rate: u32, opts: &DecodeOptions) -> Result
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));
     }
+    crate::error::check_vec_capacity::<f32>(frames)?;
     Ok(DecodedWav {
         sample_rate: RATE,
         channels: vec![decode_mono_f32(data)],

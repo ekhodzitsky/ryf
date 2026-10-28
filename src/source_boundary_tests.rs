@@ -134,3 +134,50 @@ fn streaming_large_interleaved_extent_uses_only_block_sized_arithmetic() -> Resu
     assert!(source.pos() < 300_000);
     Ok(())
 }
+
+#[test]
+fn collect_capacity_limit_does_not_restrict_streaming() -> Result<()> {
+    let frames = isize::MAX as u64 / 4 + 1;
+    let mut header = crate::encode_s16(&[], 8000)?;
+    header[4..8].fill(0);
+    header[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
+    let length = header.len() as u64 + frames * 2;
+    let mut source = ByteSource::try_from_read_seek(
+        LargeWave {
+            header,
+            position: 0,
+            length,
+        },
+        Some(length),
+    )?;
+    let options = DecodeOptions::default()
+        .with_max_duration_secs(1e20)
+        .with_max_output_bytes(u64::MAX);
+    assert!(matches!(
+        crate::decode_with(&mut source, &options),
+        Err(WavError::OutputTooLarge { bytes, max })
+            if bytes == frames * 4 && max == isize::MAX as u64
+    ));
+    source.seek(SeekFrom::Start(0))?;
+    assert!(matches!(
+        decode_streaming(&mut source, &options, |_| Err(WavError::Empty)),
+        Err(WavError::Empty)
+    ));
+    Ok(())
+}
+
+#[test]
+fn probe_reports_metadata_without_enforcing_decode_budgets() -> Result<()> {
+    let bytes = crate::encode_s16(&[0, 0], 8000)?;
+    let options = DecodeOptions::default()
+        .with_max_duration_secs(0.0)
+        .with_max_output_bytes(0);
+    let mut source = ByteSource::from_slice(&bytes);
+    assert_eq!(probe_with(&mut source, &options)?.declared_frames, Some(1));
+    assert_eq!(source.pos(), 0);
+    assert!(matches!(
+        decode_with(&mut source, &options),
+        Err(WavError::TooLong { .. })
+    ));
+    Ok(())
+}

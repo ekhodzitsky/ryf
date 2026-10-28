@@ -7,6 +7,15 @@ use std::io;
 /// Result alias for this crate.
 pub type Result<T> = std::result::Result<T, WavError>;
 
+/// Vec byte extents must fit isize even when the logical output budget allows more.
+pub(crate) fn check_vec_capacity<T>(len: usize) -> Result<()> {
+    let bytes = (len as u64).saturating_mul(std::mem::size_of::<T>() as u64);
+    if bytes > isize::MAX as u64 {
+        return Err(WavError::output_too_large(bytes, isize::MAX as u64));
+    }
+    Ok(())
+}
+
 /// Structural failure inside a WAVE container (the bytes started as WAVE).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -75,7 +84,8 @@ pub enum WavError {
     UnsupportedSampleRate { rate: u32, max: u32 },
     /// Decoded (or declared) duration exceeds the configured budget.
     TooLong { observed_secs: f64, max_secs: f64 },
-    /// Planar f32 output would exceed the configured RAM budget.
+    /// Output exceeds the configured budget, or one allocation exceeds the
+    /// platform's isize byte limit. `max` reports the limit that was exceeded.
     OutputTooLarge { bytes: u64, max: u64 },
     /// `ByteSource` has no known length (required for bounded PCM decode).
     StreamLengthUnknown,
