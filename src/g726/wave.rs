@@ -39,11 +39,10 @@ pub(crate) fn fmt_fixed(
         sample_rate,
         big_endian,
         format_tag,
-        Some(G726Params {
+        crate::header::CodecParams::G726(G726Params {
             bits: width,
             packing: G726Packing::Aal2,
         }),
-        None,
     ))
 }
 
@@ -61,8 +60,7 @@ pub(crate) fn fmt_tag_0064(
         sample_rate,
         big_endian,
         0x0064,
-        None,
-        Some(Tag0064Facts {
+        crate::header::CodecParams::Tag0064(Tag0064Facts {
             byte_rate,
             bits,
             block_align,
@@ -75,8 +73,7 @@ pub(crate) fn resolve_tag(fmt: &mut FmtFields, policy: Tag0064) -> Result<()> {
         return Ok(());
     }
     let facts = fmt
-        .tag0064
-        .as_ref()
+        .tag_0064_facts()
         .copied()
         .ok_or_else(|| WavError::format(FormatKind::MalformedFmt))?;
     match policy {
@@ -107,7 +104,7 @@ pub(crate) fn resolve_tag(fmt: &mut FmtFields, policy: Tag0064) -> Result<()> {
             }
             fmt.codec = SampleCodec::G726;
             fmt.sample_width = 1;
-            fmt.g726 = Some(G726Params {
+            fmt.params = crate::header::CodecParams::G726(G726Params {
                 bits: width,
                 packing,
             });
@@ -126,7 +123,7 @@ fn is_g722(fmt: &FmtFields, facts: &Tag0064Facts) -> bool {
 fn force_g722(fmt: &mut FmtFields) {
     fmt.codec = SampleCodec::G722;
     fmt.sample_width = 1;
-    fmt.g726 = None;
+    fmt.params = crate::header::CodecParams::None;
 }
 
 fn agreed_bits(sample_rate: u32, byte_rate: u32, bits: u16, channels: usize) -> Result<u8> {
@@ -168,20 +165,16 @@ fn fields(
     sample_rate: u32,
     big_endian: bool,
     format_tag: u16,
-    g726: Option<G726Params>,
-    tag0064: Option<Tag0064Facts>,
+    params: crate::header::CodecParams,
 ) -> FmtFields {
     FmtFields {
         codec,
         channels,
         sample_rate,
         sample_width: 1,
-        adpcm_ms: None,
-        adpcm_ima: None,
         big_endian,
         format_tag,
-        g726,
-        tag0064,
+        params,
     }
 }
 

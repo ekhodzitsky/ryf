@@ -6,9 +6,13 @@ use crate::header::SampleCodec;
 pub(crate) const I16_SCALE: f32 = 1.0 / 32_768.0;
 const HALF: f32 = 0.5;
 
+mod collect;
+pub(crate) use collect::append_s16;
+pub(crate) use scalar::f32_to_i16;
 pub(crate) mod g711;
 mod scalar;
 #[cfg(all(feature = "simd", not(miri)))]
+#[allow(unsafe_code)]
 mod simd;
 
 pub(crate) use g711::{
@@ -32,6 +36,7 @@ pub fn convert_s16_le_to_f32(src: &[u8], dst: &mut [f32]) {
 }
 
 #[inline]
+#[allow(unsafe_code)]
 pub(crate) fn convert_s16_mono(src: &[u8], dst: &mut [f32]) {
     debug_assert_eq!(src.len(), dst.len() * 2);
     #[cfg(all(feature = "simd", target_arch = "aarch64", not(miri)))]
@@ -100,6 +105,7 @@ pub(crate) fn split_s16_le_to_f32(src: &[u8], dst: &mut [&mut [f32]]) {
 }
 
 #[inline]
+#[allow(unsafe_code)]
 fn mix_s16_stereo(src: &[u8], dst: &mut [f32]) {
     debug_assert_eq!(src.len(), dst.len() * 4);
     #[cfg(all(feature = "simd", target_arch = "aarch64", not(miri)))]
@@ -137,6 +143,7 @@ fn mix_s16_stereo(src: &[u8], dst: &mut [f32]) {
 }
 
 #[inline]
+#[allow(unsafe_code)]
 fn split_s16_stereo(src: &[u8], left: &mut [f32], right: &mut [f32]) {
     debug_assert_eq!(left.len(), right.len());
     debug_assert_eq!(src.len(), left.len() * 4);
@@ -175,6 +182,7 @@ fn split_s16_stereo(src: &[u8], left: &mut [f32], right: &mut [f32]) {
 }
 
 #[inline]
+#[allow(unsafe_code)]
 pub(crate) fn convert_f32_mono(src: &[u8], dst: &mut [f32]) {
     debug_assert_eq!(src.len(), dst.len() * 4);
     // Unaligned-safe: data chunk is not guaranteed 4-byte aligned after the
@@ -228,6 +236,7 @@ pub(crate) fn convert_f32_mono(src: &[u8], dst: &mut [f32]) {
     not(miri)
 ))]
 #[target_feature(enable = "neon")]
+#[allow(unsafe_code)]
 unsafe fn convert_f32_mono_neon(src: &[u8], dst: &mut [f32]) {
     use std::arch::aarch64::*;
     let n = dst.len();
@@ -254,6 +263,7 @@ unsafe fn convert_f32_mono_neon(src: &[u8], dst: &mut [f32]) {
     not(miri)
 ))]
 #[target_feature(enable = "sse2")]
+#[allow(unsafe_code)]
 unsafe fn convert_f32_mono_sse2(src: &[u8], dst: &mut [f32]) {
     #[cfg(target_arch = "x86")]
     use std::arch::x86::*;
@@ -361,8 +371,7 @@ pub(crate) fn convert_sample(codec: SampleCodec, b: &[u8], big_endian: bool) -> 
 pub fn f32_to_s16le(samples: &[f32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(samples.len().saturating_mul(2));
     for s in samples {
-        let i = (s * 32_768.0).round();
-        let i = i.clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16;
+        let i = f32_to_i16(*s);
         out.extend_from_slice(&i.to_le_bytes());
     }
     out

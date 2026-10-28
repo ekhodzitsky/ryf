@@ -26,3 +26,25 @@ would overflow `u32` (same rule as `encode` / `encode_extensible`).
 Decode and `f32_to_s16le` share the s16 scale `/ 32768` (`* 32768` then
 clamp to `i16`). `-1.0` encodes as `-32768`; `+1.0` clamps to `32767`.
 Round-trip is lossless on length and rate; `+1.0` is not bit-exact.
+
+`WavWriter::create*` validates the complete header before opening or truncating
+the destination. RIFF and extensible path writers open the file for reading
+and writing because promotion relocates existing payload bytes. Promotion is
+linear in the existing recording size; use `new_rf64` / `create_rf64` up front
+when long-recording latency matters. The default RIFF header remains compact.
+
+Generic `new*` constructors require cursor zero and reject another origin
+before writing. Supply an empty sink; generic sinks cannot be truncated and
+pre-existing trailing bytes are not removed. Successful finalization leaves
+the cursor immediately after the WAVE payload and its alignment pad.
+
+A partial I/O failure is terminal. Further writes and `finalize` return
+`InvalidOperation`, and Drop does not retry finalization. Discard that incomplete
+file: no rollback or durability guarantee is implied. Validation failures
+before I/O leave an existing writer usable. Always call `finalize` explicitly
+to observe completion errors; repeated successful calls are harmless.
+
+G.711 encoding quantizes PCM16 on a 14-bit grid using reconstruction-level
+midpoints, with ties selecting the higher magnitude. Negative inputs round
+down to the grid. All PCM16 inputs are checked against fixed ffmpeg 7.0.2
+encoder fingerprints, including sign and segment boundaries.

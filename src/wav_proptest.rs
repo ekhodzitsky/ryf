@@ -28,29 +28,7 @@ proptest! {
             ..WavBuilder::new(codec)
         }
         .build();
-        if ext && matches!(codec, TestCodec::ALaw | TestCodec::MuLaw) {
-            // Honest extensible g711: self-gate vs plain (ffmpeg rejects).
-            let plain = WavBuilder {
-                sample_rate: rates[rate_idx],
-                channels: ch,
-                codec,
-                payload: gen_payload(codec, &mut XorShift64::new(seed), frames, usize::from(ch)),
-                ..WavBuilder::new(codec)
-            }
-            .build();
-            match (own_mono_native(&wav), own_mono_native(&plain)) {
-                (Ok((r1, a)), Ok((r2, b))) => {
-                    assert_eq!(r1, r2, "proptest ext g711 rate");
-                    assert_bit_exact("proptest ext g711 == plain", &a, &b);
-                }
-                (Err(_), Err(_)) => {}
-                (Ok(_), Err(e)) | (Err(e), Ok(_)) => {
-                    panic!("proptest ext g711 parity mismatch: {e:#}");
-                }
-            }
-        } else {
-            assert_native_bit_exact_both_modes("proptest diff", &wav);
-        }
+        assert_native_bit_exact_both_modes("proptest diff", &wav);
     }
 
     /// RIFF/WAVE-prefixed garbage must never panic the in-tree decoder,

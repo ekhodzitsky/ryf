@@ -24,6 +24,7 @@
 //! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 #[cfg(feature = "adpcm")]
 mod adpcm;
@@ -37,7 +38,6 @@ mod gsm;
 pub(crate) mod header;
 mod options;
 mod pull;
-mod scrub;
 mod source;
 mod wav;
 
@@ -52,8 +52,8 @@ pub use g722::{decode_g722, decode_g722_mono};
 pub use g726::{G726Decoder, G726Packing, G726Rate, Tag0064, decode_g726, decode_g726_mono};
 pub use gsm::{decode_gsm, decode_gsm_mono};
 pub use options::{
-    DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS, DEFAULT_MAX_OUTPUT_BYTES,
-    DEFAULT_MAX_SAMPLE_RATE, DecodeOptions,
+    ChannelMode, DEFAULT_MAX_DECODE_SAMPLE_RATE, DEFAULT_MAX_DURATION_SECS,
+    DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_MAX_SAMPLE_RATE, DecodeOptions, max_decode_samples,
 };
 pub use source::ByteSource;
 pub use wav::{
@@ -62,27 +62,15 @@ pub use wav::{
     probe_with, read, read_f32, read_s16, read_speech, read_with, sniff_is_riff_wave, sniff_wav,
 };
 
-/// How decoded channels are laid out in [`DecodedWav::channels`] /
-/// [`StreamBlock::planar`].
-///
-/// Mixing is a left-to-right sum divided by the channel count (same arithmetic
-/// the ffmpeg oracle tests use).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ChannelMode {
-    /// One mixed track (`channels.len() == 1`).
-    Mono,
-    /// One track per source channel, equal lengths. Default for library read.
-    #[default]
-    Split,
-}
-
-/// Maximum decoded frames for `sample_rate` under [`DecodeOptions::speech`]
-/// (2 h, frame-budget rate 48 kHz).
-#[inline]
-pub fn max_decode_samples(sample_rate: u32) -> usize {
-    DecodeOptions::speech().max_frames(sample_rate)
-}
-
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod lib_tests;
+
+#[cfg(test)]
+mod codec_edge_tests;
+
+#[cfg(test)]
+mod writer_failure_tests;
+
+#[cfg(test)]
+mod container_edge_tests;

@@ -14,8 +14,6 @@ fn block_and_duration_helpers() {
     assert_eq!(scratch_frames(2, 0), 1);
     assert!(check_duration(10, 20, 16_000).is_ok());
     assert!(check_duration(30, 20, 16_000).is_err());
-    assert!(!need_duration_check(10, 20));
-    assert!(need_duration_check(30, 20));
     // IMA mono ba=36: 1 + 2*(36-4) = 65. MS mono ba=32: 2 + 2*(32-7) = 52.
     assert_eq!(adpcm_est_frames(36, 36, 1, true), 65);
     assert_eq!(adpcm_est_frames(72, 36, 1, true), 130);
@@ -49,12 +47,9 @@ fn decode_adpcm_wrong_codec_errors() {
         channels: 1,
         sample_rate: 16_000,
         sample_width: 2,
-        adpcm_ms: None,
-        adpcm_ima: None,
+        params: crate::header::CodecParams::None,
         big_endian: false,
         format_tag: 1,
-        g726: None,
-        tag0064: None,
     };
     let err = decode_adpcm_interleaved(&mut ByteSource::from_slice(&[]), &fmt, 0, 10);
     #[cfg(feature = "adpcm")]
@@ -81,8 +76,14 @@ fn stream_info_eq() {
 fn short_read_is_truncated() {
     use crate::error::FormatKind;
     assert!(matches!(
-        pcm_short("wav: short s16 data"),
-        WavError::Format(FormatKind::Truncated)
+        stream::pull_mono_s16(
+            &mut ByteSource::from_slice(&[0, 0]),
+            2,
+            2,
+            8000,
+            &mut |_| Ok(())
+        ),
+        Err(WavError::Format(FormatKind::Truncated))
     ));
 }
 

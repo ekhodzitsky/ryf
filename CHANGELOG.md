@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-28
+
+### Changed
+
+- Update agent development instructions to agent-dev-kb 0.10.0 with
+  verified coding principles and resumable Backlog.md task scopes.
+- Share bounded decode windows and probe/decode frame calculations, keep
+  codec parameters exclusive, and remove redundant decode-plan metadata.
+- Reduce full-recording intermediate allocations in telephony collect,
+  headerless G.726, f32 file read, G.711 encode, RIFX encode, and f32 writing.
+
+### Fixed
+
+- Prevent MS-ADPCM predictor overflow with custom coefficients and apply
+  smaller `fact` counts before checking the decoded duration budget.
+  Report disabled ADPCM consistently before probe/decode output budgets.
+- Correct G.711 encode sign/segment boundaries and emit the standard
+  extensible mu-law GUID, retaining decode of earlier legacy GUIDs.
+- Initialize f32 buffers before slice access; deny unsafe code by default
+  with narrow SIMD and initialized-byte-view exceptions.
+- Make writer I/O failures terminal, validate before truncation, reject
+  nonzero sink origins, and open promotable files with read capability.
+- Consume repeated RF64 size-table entries correctly, validate a bounded
+  4096-record table, and consistently retain the first Wave64 `fmt `.
+- Preserve raw PCM I/O errors, fix rustdoc links, add fallible byte-source
+  initialization, and clarify partial-frame and G.726 pending-bit contracts.
+
+### Added
+
+- Regression tests for input boundaries and writer fault injection; CI
+  feature combinations, strict documentation, packaging, benchmark smoke,
+  and targeted Miri checks.
+
 ## [0.7.3] - 2026-10-05
 
 ### Added
@@ -382,7 +415,8 @@ stay closed.
   (`header`, `convert`, `pull`, `adpcm`, `wav_tests`). Decode behavior is
   unchanged. README layout lists the split directories.
 
-[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/ekhodzitsky/ryf/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/ekhodzitsky/ryf/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/ekhodzitsky/ryf/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/ekhodzitsky/ryf/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/ekhodzitsky/ryf/compare/v0.7.0...v0.7.1

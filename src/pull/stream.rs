@@ -1,149 +1,38 @@
-//! Streaming PCM pull loops (s16 / f32 / generic).
-
-use super::{
-    StreamBlock, check_duration, emit_mono_block, emit_split_block, need_duration_check, pcm_short,
-    scratch_frames,
-};
+//! Bounded callback conversion over shared source windows.
+use super::input::for_each_input;
+use super::{StreamBlock, emit_mono_block, emit_split_block, scratch_frames};
 use crate::ChannelMode;
+use crate::Result;
 use crate::convert::{
     convert_f32_mono, convert_g711_mono, convert_s16_mono, convert_sample, g711_table, mix_g711,
     mix_s16_le_to_f32, split_g711, split_s16_le_to_f32,
 };
-use crate::error::{Result, WavError};
 use crate::header::SampleCodec;
 use crate::source::ByteSource;
-
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
-
 pub(super) fn pull_mono_s16<F>(
     mss: &mut ByteSource<'_>,
-    total_frames: usize,
-    max_samples: usize,
-    sample_rate: u32,
+    total: usize,
+    max: usize,
+    rate: u32,
     on_block: &mut F,
 ) -> Result<usize>
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    let block_frames = scratch_frames(2, total_frames);
-    let check = need_duration_check(total_frames, max_samples);
-    let mut f32b = vec![0.0f32; block_frames];
-    let need = total_frames * 2;
-
-    // Zero-copy: walk PCM from the borrowed slice (no intermediate raw buffer).
-    if let Some(rest) = mss.remaining_slice() {
-        if rest.len() < need {
-            return Err(pcm_short("wav: short s16 data"));
-        }
-        let pcm = &rest[..need];
-        let mut decoded = 0usize;
-        while decoded < total_frames {
-            let frames_this = (total_frames - decoded).min(block_frames);
-            let b0 = decoded * 2;
-            let b1 = b0 + frames_this * 2;
-            convert_s16_mono(&pcm[b0..b1], &mut f32b[..frames_this]);
-            decoded += frames_this;
-            if check {
-                check_duration(decoded, max_samples, sample_rate)?;
-            }
-            emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
-        }
-        mss.advance(need as u64).map_err(WavError::packet_io)?;
-        return Ok(decoded);
-    }
-
-    let mut raw = vec![0u8; block_frames * 2];
-    let mut decoded = 0usize;
-    let mut bytes_left = total_frames as u64 * 2;
-
-    while bytes_left >= 2 {
-        let frames_this = ((bytes_left / 2) as usize).min(block_frames);
-        let want = frames_this * 2;
-        mss.read_buf_exact(&mut raw[..want])
-            .map_err(WavError::packet_io)?;
-        bytes_left -= want as u64;
-
-        convert_s16_mono(&raw[..want], &mut f32b[..frames_this]);
-        decoded += frames_this;
-        if check {
-            check_duration(decoded, max_samples, sample_rate)?;
-        }
-        emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
-    }
-    Ok(decoded)
+    let mut out = vec![0.0; scratch_frames(2, total)];
+    for_each_input(mss, total, 2, max, rate, |bytes, range| {
+        let n = range.len();
+        convert_s16_mono(bytes, &mut out[..n]);
+        emit_mono_block(rate, &out[..n], on_block)
+    })
 }
-
-pub(super) fn pull_mix_s16<F>(
-    mss: &mut ByteSource<'_>,
-    total_frames: usize,
-    frame_bytes: usize,
-    channels: usize,
-    max_samples: usize,
-    sample_rate: u32,
-    on_block: &mut F,
-) -> Result<usize>
-where
-    F: FnMut(StreamBlock<'_>) -> Result<()>,
-{
-    let block_frames = scratch_frames(frame_bytes, total_frames);
-    let check = need_duration_check(total_frames, max_samples);
-    let mut f32b = vec![0.0f32; block_frames];
-    let need = total_frames * frame_bytes;
-
-    if let Some(rest) = mss.remaining_slice() {
-        if rest.len() < need {
-            return Err(pcm_short("wav: short s16 mix data"));
-        }
-        let pcm = &rest[..need];
-        let mut decoded = 0usize;
-        while decoded < total_frames {
-            let frames_this = (total_frames - decoded).min(block_frames);
-            let b0 = decoded * frame_bytes;
-            let b1 = b0 + frames_this * frame_bytes;
-            mix_s16_le_to_f32(&pcm[b0..b1], &mut f32b[..frames_this], channels);
-            decoded += frames_this;
-            if check {
-                check_duration(decoded, max_samples, sample_rate)?;
-            }
-            emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
-        }
-        mss.advance(need as u64).map_err(WavError::packet_io)?;
-        return Ok(decoded);
-    }
-
-    let mut raw = vec![0u8; block_frames * frame_bytes];
-    let mut decoded = 0usize;
-    let mut bytes_left = total_frames as u64 * frame_bytes as u64;
-
-    while bytes_left >= frame_bytes as u64 {
-        let frames_this = ((bytes_left / frame_bytes as u64) as usize).min(block_frames);
-        let want = frames_this * frame_bytes;
-        mss.read_buf_exact(&mut raw[..want])
-            .map_err(WavError::packet_io)?;
-        bytes_left -= want as u64;
-        mix_s16_le_to_f32(&raw[..want], &mut f32b[..frames_this], channels);
-        decoded += frames_this;
-        if check {
-            check_duration(decoded, max_samples, sample_rate)?;
-        }
-        emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
-    }
-    Ok(decoded)
-}
-
-// Test-only entry count so a streaming test can see this arm ran.
-#[cfg(test)]
-pub(super) fn pull_mono_f32_hits() -> &'static AtomicUsize {
-    static HITS: AtomicUsize = AtomicUsize::new(0);
-    &HITS
-}
-
 pub(super) fn pull_mono_f32<F>(
     mss: &mut ByteSource<'_>,
-    total_frames: usize,
-    max_samples: usize,
-    sample_rate: u32,
+    total: usize,
+    max: usize,
+    rate: u32,
     on_block: &mut F,
 ) -> Result<usize>
 where
@@ -151,224 +40,139 @@ where
 {
     #[cfg(test)]
     pull_mono_f32_hits().fetch_add(1, Ordering::Relaxed);
-
-    let block_frames = scratch_frames(4, total_frames);
-    let check = need_duration_check(total_frames, max_samples);
-    let mut f32b = vec![0.0f32; block_frames];
-    let need = total_frames * 4;
-
-    if let Some(rest) = mss.remaining_slice() {
-        if rest.len() < need {
-            return Err(pcm_short("wav: short f32 data"));
-        }
-        let pcm = &rest[..need];
-        let mut decoded = 0usize;
-        while decoded < total_frames {
-            let frames_this = (total_frames - decoded).min(block_frames);
-            let b0 = decoded * 4;
-            let b1 = b0 + frames_this * 4;
-            convert_f32_mono(&pcm[b0..b1], &mut f32b[..frames_this]);
-            decoded += frames_this;
-            if check {
-                check_duration(decoded, max_samples, sample_rate)?;
-            }
-            emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
-        }
-        mss.advance(need as u64).map_err(WavError::packet_io)?;
-        return Ok(decoded);
-    }
-
-    let mut raw = vec![0u8; block_frames * 4];
-    let mut decoded = 0usize;
-    let mut bytes_left = total_frames as u64 * 4;
-
-    while bytes_left >= 4 {
-        let frames_this = ((bytes_left / 4) as usize).min(block_frames);
-        let want = frames_this * 4;
-        mss.read_buf_exact(&mut raw[..want])
-            .map_err(WavError::packet_io)?;
-        bytes_left -= want as u64;
-
-        convert_f32_mono(&raw[..want], &mut f32b[..frames_this]);
-        decoded += frames_this;
-        if check {
-            check_duration(decoded, max_samples, sample_rate)?;
-        }
-        emit_mono_block(sample_rate, &f32b[..frames_this], on_block)?;
-    }
-    Ok(decoded)
+    let mut out = vec![0.0; scratch_frames(4, total)];
+    for_each_input(mss, total, 4, max, rate, |bytes, range| {
+        let n = range.len();
+        convert_f32_mono(bytes, &mut out[..n]);
+        emit_mono_block(rate, &out[..n], on_block)
+    })
 }
-
+#[cfg(test)]
+pub(super) fn pull_mono_f32_hits() -> &'static AtomicUsize {
+    static HITS: AtomicUsize = AtomicUsize::new(0);
+    &HITS
+}
+pub(super) fn pull_mix_s16<F>(
+    mss: &mut ByteSource<'_>,
+    total: usize,
+    frame_bytes: usize,
+    channels: usize,
+    max: usize,
+    rate: u32,
+    on_block: &mut F,
+) -> Result<usize>
+where
+    F: FnMut(StreamBlock<'_>) -> Result<()>,
+{
+    let mut out = vec![0.0; scratch_frames(frame_bytes, total)];
+    for_each_input(mss, total, frame_bytes, max, rate, |bytes, range| {
+        let n = range.len();
+        mix_s16_le_to_f32(bytes, &mut out[..n], channels);
+        emit_mono_block(rate, &out[..n], on_block)
+    })
+}
 pub(super) fn pull_split_s16<F>(
     mss: &mut ByteSource<'_>,
-    total_frames: usize,
+    total: usize,
     frame_bytes: usize,
     channels: usize,
-    max_samples: usize,
-    sample_rate: u32,
+    max: usize,
+    rate: u32,
     on_block: &mut F,
 ) -> Result<usize>
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    let block_frames = scratch_frames(frame_bytes, total_frames);
-    let check = need_duration_check(total_frames, max_samples);
-    let mut planar: Vec<Vec<f32>> = (0..channels).map(|_| vec![0.0f32; block_frames]).collect();
-    let need = total_frames * frame_bytes;
-
-    if let Some(rest) = mss.remaining_slice() {
-        if rest.len() < need {
-            return Err(pcm_short("wav: short s16 split data"));
-        }
-        let pcm = &rest[..need];
-        let mut decoded = 0usize;
-        while decoded < total_frames {
-            let frames_this = (total_frames - decoded).min(block_frames);
-            let b0 = decoded * frame_bytes;
-            let b1 = b0 + frames_this * frame_bytes;
-            {
-                let mut planes: Vec<&mut [f32]> =
-                    planar.iter_mut().map(|p| &mut p[..frames_this]).collect();
-                split_s16_le_to_f32(&pcm[b0..b1], &mut planes);
-            }
-            decoded += frames_this;
-            if check {
-                check_duration(decoded, max_samples, sample_rate)?;
-            }
-            emit_split_block(sample_rate, frames_this, &planar, on_block)?;
-        }
-        mss.advance(need as u64).map_err(WavError::packet_io)?;
-        return Ok(decoded);
-    }
-
-    let mut raw = vec![0u8; block_frames * frame_bytes];
-    let mut decoded = 0usize;
-    let mut bytes_left = total_frames as u64 * frame_bytes as u64;
-
-    while bytes_left >= frame_bytes as u64 {
-        let frames_this = ((bytes_left / frame_bytes as u64) as usize).min(block_frames);
-        let want = frames_this * frame_bytes;
-        mss.read_buf_exact(&mut raw[..want])
-            .map_err(WavError::packet_io)?;
-        bytes_left -= want as u64;
-        {
-            let mut planes: Vec<&mut [f32]> =
-                planar.iter_mut().map(|p| &mut p[..frames_this]).collect();
-            split_s16_le_to_f32(&raw[..want], &mut planes);
-        }
-        decoded += frames_this;
-        if check {
-            check_duration(decoded, max_samples, sample_rate)?;
-        }
-        emit_split_block(sample_rate, frames_this, &planar, on_block)?;
-    }
-    Ok(decoded)
+    let mut out: Vec<Vec<f32>> = (0..channels)
+        .map(|_| vec![0.0; scratch_frames(frame_bytes, total)])
+        .collect();
+    for_each_input(mss, total, frame_bytes, max, rate, |bytes, range| {
+        let n = range.len();
+        let mut planes: Vec<&mut [f32]> = out.iter_mut().map(|p| &mut p[..n]).collect();
+        split_s16_le_to_f32(bytes, &mut planes);
+        emit_split_block(rate, n, &out, on_block)
+    })
 }
-
-#[allow(clippy::too_many_arguments)]
 pub(super) fn pull_generic<F>(
     mss: &mut ByteSource<'_>,
-    mode: ChannelMode,
-    codec: SampleCodec,
-    channels: usize,
-    sample_width: usize,
-    frame_bytes: usize,
-    total_frames: usize,
-    max_samples: usize,
-    sample_rate: u32,
-    big_endian: bool,
+    plan: &super::DecodePlan,
     on_block: &mut F,
 ) -> Result<usize>
 where
     F: FnMut(StreamBlock<'_>) -> Result<()>,
 {
-    let block_frames = scratch_frames(frame_bytes, total_frames);
-    let check = need_duration_check(total_frames, max_samples);
-    let mut raw = vec![0u8; block_frames * frame_bytes];
-    let n_out = match mode {
-        ChannelMode::Mono => 1,
-        ChannelMode::Split => channels,
+    let mode = plan.mode;
+    let codec = plan.fmt.codec;
+    let channels = plan.fmt.channels;
+    let sample_width = plan.fmt.sample_width;
+    let frame_bytes = plan.frame_bytes;
+    let total_frames = plan.total_frames;
+    let max_samples = plan.max_samples;
+    let sample_rate = plan.sample_rate;
+    let big_endian = plan.fmt.big_endian;
+    let n_out = if mode == ChannelMode::Mono {
+        1
+    } else {
+        channels
     };
-    let mut planar: Vec<Vec<f32>> = (0..n_out).map(|_| vec![0.0f32; block_frames]).collect();
-    let mut decoded = 0usize;
-    let mut bytes_left = total_frames as u64 * frame_bytes as u64;
-
-    while bytes_left >= frame_bytes as u64 {
-        let frames_this = ((bytes_left / frame_bytes as u64) as usize).min(block_frames);
-        let want = frames_this * frame_bytes;
-        mss.read_buf_exact(&mut raw[..want])
-            .map_err(WavError::packet_io)?;
-        bytes_left -= want as u64;
-
-        if let Some(table) = g711_fast(codec, sample_width, big_endian) {
-            match mode {
-                ChannelMode::Mono if channels == 1 => {
-                    convert_g711_mono(&raw[..want], &mut planar[0][..frames_this], table);
+    let mut planar: Vec<Vec<f32>> = (0..n_out)
+        .map(|_| vec![0.0; scratch_frames(frame_bytes, total_frames)])
+        .collect();
+    for_each_input(
+        mss,
+        total_frames,
+        frame_bytes,
+        max_samples,
+        sample_rate,
+        |bytes, range| {
+            let frames_this = range.len();
+            if let Some(table) = g711_fast(codec, sample_width, big_endian) {
+                match mode {
+                    ChannelMode::Mono if channels == 1 => {
+                        convert_g711_mono(bytes, &mut planar[0][..frames_this], table);
+                    }
+                    ChannelMode::Mono => {
+                        mix_g711(bytes, &mut planar[0][..frames_this], channels, table);
+                    }
+                    ChannelMode::Split => {
+                        let mut planes: Vec<&mut [f32]> =
+                            planar.iter_mut().map(|p| &mut p[..frames_this]).collect();
+                        split_g711(bytes, &mut planes, table);
+                    }
                 }
-                ChannelMode::Mono => {
-                    mix_g711(&raw[..want], &mut planar[0][..frames_this], channels, table);
-                }
-                ChannelMode::Split => {
-                    let mut planes: Vec<&mut [f32]> =
-                        planar.iter_mut().map(|p| &mut p[..frames_this]).collect();
-                    split_g711(&raw[..want], &mut planes, table);
-                }
-            }
-        } else {
-            match mode {
-                ChannelMode::Mono => {
-                    let mono = &mut planar[0];
-                    if channels == 1 {
-                        for (i, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
-                            mono[i] = convert_sample(codec, frame, big_endian);
-                        }
-                    } else {
-                        let n_ch = channels as f32;
-                        for (i, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
-                            let mut sum = 0.0f32;
-                            for sample in frame.chunks_exact(sample_width) {
-                                sum += convert_sample(codec, sample, big_endian);
+            } else {
+                match mode {
+                    ChannelMode::Mono => {
+                        let mono = &mut planar[0];
+                        if channels == 1 {
+                            for (i, frame) in bytes.chunks_exact(frame_bytes).enumerate() {
+                                mono[i] = convert_sample(codec, frame, big_endian);
                             }
-                            mono[i] = sum / n_ch;
+                        } else {
+                            let n_ch = channels as f32;
+                            for (i, frame) in bytes.chunks_exact(frame_bytes).enumerate() {
+                                let mut sum = 0.0f32;
+                                for sample in frame.chunks_exact(sample_width) {
+                                    sum += convert_sample(codec, sample, big_endian);
+                                }
+                                mono[i] = sum / n_ch;
+                            }
                         }
                     }
-                }
-                ChannelMode::Split => {
-                    for (fi, frame) in raw[..want].chunks_exact(frame_bytes).enumerate() {
-                        for (c, sample) in frame.chunks_exact(sample_width).enumerate() {
-                            planar[c][fi] = convert_sample(codec, sample, big_endian);
+                    ChannelMode::Split => {
+                        for (fi, frame) in bytes.chunks_exact(frame_bytes).enumerate() {
+                            for (c, sample) in frame.chunks_exact(sample_width).enumerate() {
+                                planar[c][fi] = convert_sample(codec, sample, big_endian);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        decoded += frames_this;
-        if check {
-            check_duration(decoded, max_samples, sample_rate)?;
-        }
-        if n_out <= 8 {
-            let mut slots: [&[f32]; 8] = [&[]; 8];
-            for c in 0..n_out {
-                slots[c] = &planar[c][..frames_this];
-            }
-            on_block(StreamBlock {
-                sample_rate,
-                frames: frames_this,
-                planar: &slots[..n_out],
-            })?;
-        } else {
-            let refs: Vec<&[f32]> = planar.iter().map(|ch| &ch[..frames_this]).collect();
-            on_block(StreamBlock {
-                sample_rate,
-                frames: frames_this,
-                planar: &refs,
-            })?;
-        }
-    }
-    Ok(decoded)
+            emit_split_block(sample_rate, frames_this, &planar, on_block)
+        },
+    )
 }
-
 fn g711_fast(
     codec: SampleCodec,
     sample_width: usize,

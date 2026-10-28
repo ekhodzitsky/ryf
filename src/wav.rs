@@ -9,10 +9,7 @@ use crate::ChannelMode;
 use crate::error::{FormatKind, Result, WavError};
 use crate::header::{self, SampleCodec, parse_header};
 use crate::options::DecodeOptions;
-use crate::pull::{
-    adpcm_frames_capped, codec_gate, decode_collect, ensure_adpcm_enabled, framed_count,
-    open_decode,
-};
+use crate::pull::{codec_gate, decode_collect, frame_layout, open_decode};
 use crate::source::ByteSource;
 
 pub use crate::convert::convert_s16_le_to_f32;
@@ -132,46 +129,11 @@ pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavP
 fn probe_inner(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProbe> {
     let mut header = parse_header(mss)?;
     let sample_rate = codec_gate(&mut header.fmt, opts)?;
-    if header.fmt.codec.is_adpcm() {
-        ensure_adpcm_enabled()?;
-    }
-    // Same clamp as `open_decode`: lying `data` size cannot exceed the file.
-    let data_len = match header.declared_data_len {
-        Some(d) => Some(
-            d.min(
-                mss.byte_len()
-                    .map(|n| n.saturating_sub(header.data_pos))
-                    .unwrap_or(d),
-            ),
-        ),
-        None => mss.byte_len().map(|n| n.saturating_sub(header.data_pos)),
-    };
-    let declared_frames = if let Some((_, frames)) =
-        framed_count(&header.fmt, data_len, header.declared_sample_count)?
-    {
-        frames
-    } else if header.fmt.codec.is_adpcm() {
-        let (ba, ch, ima) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
-            (Some(p), _) => (u64::from(p.block_align), p.channels as u64, false),
-            (_, Some(p)) => (u64::from(p.block_align), p.channels as u64, true),
-            _ => (0, 1, false),
-        };
-        data_len.map(|d| adpcm_frames_capped(d, ba, ch, ima, header.declared_sample_count))
-    } else {
-        let frame_bytes = header
-            .fmt
-            .sample_width
-            .checked_mul(header.fmt.channels)
-            .filter(|&n| n > 0)
-            .ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
-        data_len.map(|d| {
-            let actual = d / frame_bytes as u64;
-            match header.declared_sample_count {
-                Some(sc) if sc > 0 => actual.min(sc),
-                _ => actual,
-            }
-        })
-    };
+    let (_, declared_frames) = frame_layout(
+        &header.fmt,
+        header.data_len(mss.byte_len()),
+        header.declared_sample_count,
+    )?;
     Ok(WavProbe {
         sample_rate,
         channels: header.fmt.channels,
@@ -259,8 +221,7 @@ fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
         return Ok((header.fmt.sample_rate, rest[..n].to_vec()));
     }
     let mut out = vec![0u8; n];
-    src.read_buf_exact(&mut out)
-        .map_err(|_| WavError::format(FormatKind::Truncated))?;
+    src.read_buf_exact(&mut out).map_err(WavError::packet_io)?;
     Ok((header.fmt.sample_rate, out))
 }
 
@@ -271,6 +232,10 @@ pub fn decode_f32(data: &[u8]) -> Result<(u32, Vec<f32>)> {
         data,
         DecodeOptions::unbounded().with_channel_mode(ChannelMode::Mono),
     )?;
+    take_mono(decoded)
+}
+
+fn take_mono(decoded: DecodedWav) -> Result<(u32, Vec<f32>)> {
     let mono = decoded
         .channels
         .into_iter()
@@ -297,18 +262,21 @@ pub fn read_speech(path: impl AsRef<Path>) -> Result<DecodedWav> {
 /// [`read`] with explicit [`DecodeOptions`].
 pub fn read_with(path: impl AsRef<Path>, opts: &DecodeOptions) -> Result<DecodedWav> {
     let file = std::fs::File::open(path)?;
-    decode_with(&mut ByteSource::from_file(file), opts)
+    decode_with(&mut ByteSource::try_from_file(file)?, opts)
 }
 
 /// [`decode_s16`] from a filesystem path.
 pub fn read_s16(path: impl AsRef<Path>) -> Result<(u32, Vec<u8>)> {
     let file = std::fs::File::open(path)?;
-    decode_s16_from(&mut ByteSource::from_file(file))
+    decode_s16_from(&mut ByteSource::try_from_file(file)?)
 }
 
 /// [`decode_f32`] from a filesystem path.
 pub fn read_f32(path: impl AsRef<Path>) -> Result<(u32, Vec<f32>)> {
-    decode_f32(&std::fs::read(path)?)
+    take_mono(read_with(
+        path,
+        &DecodeOptions::unbounded().with_channel_mode(ChannelMode::Mono),
+    )?)
 }
 
 /// Slurp `reader` then [`decode_bytes`]. The slurp stops at
@@ -332,3 +300,7 @@ mod tests;
 #[cfg(all(test, not(miri)))]
 #[path = "wav_proptest.rs"]
 mod proptests;
+
+#[cfg(test)]
+#[path = "source_boundary_tests.rs"]
+mod source_boundary_tests;

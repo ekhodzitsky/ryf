@@ -4,9 +4,6 @@ use super::ImaAdpcmParams;
 use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
 
-#[cfg(test)]
-use super::{ScrubVec, scrub_vec};
-
 // IMA step / index tables (public domain).
 const IMA_STEP: [i16; 89] = [
     7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66,
@@ -82,7 +79,7 @@ pub(crate) fn decode_ima_adpcm(
         .saturating_mul(params.samples_per_block as usize)
         .min(max_frames)
         .saturating_mul(ch);
-    let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
+    let mut out: Vec<i16> = Vec::new();
     out.try_reserve(hint)
         .map_err(|_| WavError::format(FormatKind::Adpcm))?;
     for_each_ima_adpcm_block(

@@ -1,7 +1,5 @@
 //! Decode / probe configuration.
 
-use crate::ChannelMode;
-
 /// Speech-ingest caps (2 h, 192 kHz, 4 GiB planar f32). Used by
 /// [`DecodeOptions::speech`] / [`crate::read_speech`]. Library default is
 /// [`DecodeOptions::unbounded`] (split channels).
@@ -134,3 +132,24 @@ impl DecodeOptions {
 #[cfg(test)]
 #[path = "options_tests.rs"]
 mod options_tests;
+
+/// How decoded channels are laid out in [`crate::DecodedWav::channels`] /
+/// [`crate::StreamBlock::planar`].
+///
+/// Mixing is a left-to-right sum divided by the channel count (same arithmetic
+/// the ffmpeg oracle tests use).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChannelMode {
+    /// One mixed track (`channels.len() == 1`).
+    Mono,
+    /// One track per source channel, equal lengths. Default for library read.
+    #[default]
+    Split,
+}
+
+/// Maximum decoded frames for `sample_rate` under [`DecodeOptions::speech`]
+/// (2 h, frame-budget rate 48 kHz).
+#[inline]
+pub fn max_decode_samples(sample_rate: u32) -> usize {
+    DecodeOptions::speech().max_frames(sample_rate)
+}

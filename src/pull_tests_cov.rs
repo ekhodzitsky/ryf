@@ -19,12 +19,9 @@ fn pcm_fields(codec: SampleCodec, ch: usize, width: usize) -> crate::header::Fmt
         channels: ch,
         sample_rate: 16_000,
         sample_width: width,
-        adpcm_ms: None,
-        adpcm_ima: None,
+        params: crate::header::CodecParams::None,
         big_endian: false,
         format_tag: 1,
-        g726: None,
-        tag0064: None,
     }
 }
 
@@ -38,13 +35,9 @@ fn plan(
 ) -> DecodePlan {
     DecodePlan {
         sample_rate: 16_000,
-        channels: ch,
-        sample_width: width,
         frame_bytes: width * ch,
         total_frames: frames,
         max_samples: max,
-        codec,
-        big_endian: false,
         mode,
         data_len: (frames * width * ch) as u64,
         fmt: pcm_fields(codec, ch, width),
@@ -166,15 +159,7 @@ fn pull_stream_cursor_short_and_duration() -> Result<()> {
     assert_eq!(
         stream::pull_generic(
             &mut cursor(u8p.clone()),
-            ChannelMode::Split,
-            SampleCodec::U8,
-            9,
-            1,
-            9,
-            3,
-            10_000,
-            8_000,
-            false,
+            &plan(SampleCodec::U8, 9, 1, 3, 10_000, ChannelMode::Split),
             &mut on_ok
         )?,
         3
@@ -182,15 +167,7 @@ fn pull_stream_cursor_short_and_duration() -> Result<()> {
     assert!(
         stream::pull_generic(
             &mut cursor(u8p),
-            ChannelMode::Split,
-            SampleCodec::U8,
-            9,
-            1,
-            9,
-            3,
-            1,
-            8_000,
-            false,
+            &plan(SampleCodec::U8, 9, 1, 3, 1, ChannelMode::Split),
             &mut on_ok
         )
         .is_err()

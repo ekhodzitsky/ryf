@@ -25,9 +25,56 @@ pub(crate) fn codec_gate(fmt: &mut FmtFields, opts: &DecodeOptions) -> Result<u3
     if matches!(fmt.codec, SampleCodec::Unsupported) {
         return Err(WavError::unsupported_codec(fmt.format_tag));
     }
+    if fmt.codec.is_adpcm() {
+        super::adpcm::ensure_adpcm_enabled()?;
+    }
     let sample_rate = crate::g722::output_rate(fmt.codec, header_rate);
     if sample_rate > opts.max_sample_rate {
         return Err(WavError::sample_rate(sample_rate, opts.max_sample_rate));
     }
     Ok(sample_rate)
+}
+
+/// Common frame calculation for probe and decode. Smaller positive fact/ds64
+/// counts trim the available audio; larger declarations never inflate it.
+pub(crate) fn frame_layout(
+    fmt: &FmtFields,
+    data_len: Option<u64>,
+    declared: Option<u64>,
+) -> Result<(usize, Option<u64>)> {
+    if let Some(layout) = super::special::framed_count(fmt, data_len, declared)? {
+        return Ok(layout);
+    }
+    if fmt.codec.is_adpcm() {
+        let (block, channels, ima) = match &fmt.params {
+            crate::header::CodecParams::Ms(p) => (p.block_align, p.channels, false),
+            crate::header::CodecParams::Ima(p) => (p.block_align, p.channels, true),
+            _ => return Err(WavError::format(FormatKind::Adpcm)),
+        };
+        return Ok((
+            0,
+            data_len.map(|n| {
+                super::adpcm::adpcm_frames_capped(
+                    n,
+                    u64::from(block),
+                    channels as u64,
+                    ima,
+                    declared,
+                )
+            }),
+        ));
+    }
+    let bytes = fmt
+        .sample_width
+        .checked_mul(fmt.channels)
+        .filter(|n| *n > 0)
+        .ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
+    let frames = data_len.map(|n| {
+        let available = n / bytes as u64;
+        match declared {
+            Some(n) if n > 0 => available.min(n),
+            _ => available,
+        }
+    });
+    Ok((bytes, frames))
 }

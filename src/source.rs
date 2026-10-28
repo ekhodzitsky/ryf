@@ -52,6 +52,8 @@ pub struct ByteSource<'a> {
     memory: Contiguous<'a>,
 }
 
+// Legacy initialization is deliberately best-effort; strict constructors below
+// propagate failures before handing a source to the decoder.
 fn wrap_seekable<'b, R>(mut inner: R, byte_len: Option<u64>) -> ByteSource<'b>
 where
     R: Read + Seek + Send + 'b,
@@ -83,7 +85,7 @@ impl<'a> ByteSource<'a> {
     }
 
     /// Owned in-memory buffer (contiguous view - same zero-copy PCM path as
-    /// [`from_slice`]).
+    /// [`Self::from_slice`]).
     pub fn from_vec(data: Vec<u8>) -> ByteSource<'static> {
         let len = data.len() as u64;
         ByteSource {
@@ -94,20 +96,56 @@ impl<'a> ByteSource<'a> {
         }
     }
 
-    /// Local file, streamed. Rewinds to 0 when the handle allows it;
-    /// `pos` always follows the real cursor.
+    /// Local file with best-effort rewind and length discovery.
+    /// Use [`Self::try_from_file`] to report initialization failures.
     pub fn from_file(file: std::fs::File) -> ByteSource<'static> {
         let meta_len = file.metadata().ok().map(|m| m.len());
         wrap_seekable(file, meta_len)
     }
 
-    /// Arbitrary `Read + Seek + Send`. Rewinds to 0. `None` length is filled
-    /// from seek-end when that works.
+    /// Arbitrary `Read + Seek + Send`, with best-effort rewind and length.
+    /// If rewind fails, the actual cursor is retained when observable. If the
+    /// cursor cannot be queried, `pos()` starts as a logical zero. Use
+    /// [`Self::try_from_read_seek`] when initialization failures must be reported.
     pub fn from_read_seek<'b, R>(inner: R, byte_len: Option<u64>) -> ByteSource<'b>
     where
         R: Read + Seek + Send + 'b,
     {
         wrap_seekable(inner, byte_len)
+    }
+
+    /// File-backed source with fallible length discovery and rewind.
+    pub fn try_from_file(file: std::fs::File) -> io::Result<ByteSource<'static>> {
+        let len = file.metadata()?.len();
+        Self::try_from_read_seek(file, Some(len))
+    }
+
+    /// Require a successful rewind. With no supplied length, seek-end must
+    /// succeed too; use [`Self::from_read_seek`] for best-effort discovery.
+    pub fn try_from_read_seek<'b, R>(
+        mut inner: R,
+        byte_len: Option<u64>,
+    ) -> io::Result<ByteSource<'b>>
+    where
+        R: Read + Seek + Send + 'b,
+    {
+        let len = match byte_len {
+            Some(n) => n,
+            None => inner.seek(SeekFrom::End(0))?,
+        };
+        let pos = inner.seek(SeekFrom::Start(0))?;
+        if pos != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "rewind did not reach zero",
+            ));
+        }
+        Ok(ByteSource {
+            inner: Box::new(inner),
+            pos,
+            byte_len: Some(len),
+            memory: Contiguous::None,
+        })
     }
 
     #[inline]
@@ -135,6 +173,28 @@ impl<'a> ByteSource<'a> {
             return Some(&[]);
         }
         Some(&data[pos..])
+    }
+
+    /// Borrow memory directly or reuse a bounded read buffer, advancing once.
+    #[inline]
+    pub(crate) fn read_window<'b>(
+        &'b mut self,
+        n: usize,
+        scratch: &'b mut Vec<u8>,
+    ) -> io::Result<&'b [u8]> {
+        if matches!(self.memory, Contiguous::None) {
+            scratch.resize(n, 0);
+            self.read_exact(scratch)?;
+            return Ok(scratch);
+        }
+        let data = self.memory.as_slice().ok_or(io::ErrorKind::UnexpectedEof)?;
+        let start = usize::try_from(self.pos).map_err(|_| io::ErrorKind::UnexpectedEof)?;
+        let end = start
+            .checked_add(n)
+            .filter(|end| *end <= data.len())
+            .ok_or(io::ErrorKind::UnexpectedEof)?;
+        self.pos = end as u64;
+        Ok(&data[start..end])
     }
 
     pub(crate) fn read_buf_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
@@ -211,7 +271,7 @@ impl<'a> ByteSource<'a> {
         let mut remaining = count;
         let mut scratch = [0u8; 8192];
         while remaining > 0 {
-            let want = (remaining as usize).min(scratch.len());
+            let want = remaining.min(scratch.len() as u64) as usize;
             let n = self.read(&mut scratch[..want])?;
             if n == 0 {
                 return Err(io::Error::new(

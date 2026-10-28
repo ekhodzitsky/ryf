@@ -21,46 +21,16 @@ fn test_diff_matrix_bit_exact() -> Result<()> {
                     // `test_diff_packet_boundary_crossing`.
                     let payload = gen_payload(codec, &mut rng, 257, usize::from(ch));
                     let label = format!("rate={rate} ch={ch} codec={codec:?} ext={ext}");
-                    if ext && matches!(codec, TestCodec::ALaw | TestCodec::MuLaw) {
-                        // Honest extensible g711 (valid_bits=8) is accepted;
-                        // ffmpeg rejects it, so self-gate against plain form
-                        // with the same payload.
-                        let ext_wav = WavBuilder {
-                            sample_rate: rate,
-                            channels: ch,
-                            codec,
-                            extensible: true,
-                            payload: payload.clone(),
-                            ..WavBuilder::new(codec)
-                        }
-                        .build();
-                        let plain_wav = WavBuilder {
-                            sample_rate: rate,
-                            channels: ch,
-                            codec,
-                            payload,
-                            ..WavBuilder::new(codec)
-                        }
-                        .build();
-                        let (_, a) = own_mono_native(&ext_wav)?;
-                        let (_, b) = own_mono_native(&plain_wav)?;
-                        assert_bit_exact(&format!("{label} ext==plain"), &a, &b);
-                    } else {
-                        let wav = WavBuilder {
-                            sample_rate: rate,
-                            channels: ch,
-                            codec,
-                            extensible: ext,
-                            payload,
-                            ..WavBuilder::new(codec)
-                        }
-                        .build();
-                        // Native-rate comparison: conversion bit-exactness
-                        // is rate-independent, and the shared resample
-                        // stage is covered by the end-to-end subset in
-                        // `test_diff_resample_integration`.
-                        assert_native_bit_exact_both_modes(&label, &wav);
+                    let wav = WavBuilder {
+                        sample_rate: rate,
+                        channels: ch,
+                        codec,
+                        extensible: ext,
+                        payload,
+                        ..WavBuilder::new(codec)
                     }
+                    .build();
+                    assert_native_bit_exact_both_modes(&label, &wav);
                     cells += 1;
                 }
             }
@@ -113,9 +83,6 @@ fn test_diff_multi_rate() -> Result<()> {
     ] {
         for ch in [1u16, 2] {
             for ext in [false, true] {
-                if ext && matches!(codec, TestCodec::MuLaw) {
-                    continue; // ext g711 covered by the quirk tests
-                }
                 let payload = gen_payload(codec, &mut rng, 321, usize::from(ch));
                 let wav = WavBuilder {
                     sample_rate: rate,
@@ -258,22 +225,7 @@ fn test_diff_g711_full_sweep() -> Result<()> {
             }
             .build();
             let label = format!("{codec:?} sweep ext={ext}");
-            // Honest extensible g711 (valid_bits=8) is accepted; plain and
-            // extensible must match. ffmpeg rejects extensible g711, so
-            // extensible is self-gated against the plain form.
-            if ext {
-                let plain = WavBuilder {
-                    sample_rate: 8000,
-                    payload: (0..=255).collect(),
-                    ..WavBuilder::new(codec)
-                }
-                .build();
-                let own_ext = own_mono(&wav)?;
-                let own_plain = own_mono(&plain)?;
-                assert_bit_exact(&format!("{label} == plain"), &own_ext, &own_plain);
-            } else {
-                assert_bit_exact_both_modes(&label, &wav);
-            }
+            assert_bit_exact_both_modes(&label, &wav);
         }
     }
     Ok(())
@@ -284,8 +236,8 @@ fn test_diff_g711_extensible_valid16() -> Result<()> {
     // The one extensible g711 form the old symphonia pipeline decoded:
     // valid_bits == 16 (its decoder demands the stated width equal the
     // 16-bit decoded width). Nonsensical per the WAV spec, but kept for
-    // parity. ffmpeg rejects extensible mu-law/A-law outright, so the
-    // gate is self-consistency: the extensible parse must yield the same
+    // parity. The nonstandard valid-bits value is self-gated:
+    // the extensible parse must yield the same
     // samples as the plain form (itself gated vs ffmpeg in the sweeps).
     for codec in [TestCodec::ALaw, TestCodec::MuLaw] {
         let payload: Vec<u8> = (0..=255).collect();

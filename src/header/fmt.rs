@@ -73,12 +73,9 @@ pub(super) fn parse_fmt_chunk(
                 channels,
                 sample_rate,
                 sample_width: width,
-                adpcm_ms: None,
-                adpcm_ima: None,
+                params: crate::header::CodecParams::None,
                 big_endian,
                 format_tag: format,
-                g726: None,
-                tag0064: None,
             })
         }
         WAVE_FORMAT_IEEE_FLOAT => {
@@ -102,12 +99,9 @@ pub(super) fn parse_fmt_chunk(
                 channels,
                 sample_rate,
                 sample_width: width,
-                adpcm_ms: None,
-                adpcm_ima: None,
+                params: crate::header::CodecParams::None,
                 big_endian,
                 format_tag: format,
-                g726: None,
-                tag0064: None,
             })
         }
         WAVE_FORMAT_ALAW | WAVE_FORMAT_MULAW | WAVE_FORMAT_G722_ADPCM | WAVE_FORMAT_ADPCM_G722 => {
@@ -123,12 +117,9 @@ pub(super) fn parse_fmt_chunk(
                 channels,
                 sample_rate,
                 sample_width: 1,
-                adpcm_ms: None,
-                adpcm_ima: None,
+                params: crate::header::CodecParams::None,
                 big_endian,
                 format_tag: format,
-                g726: None,
-                tag0064: None,
             })
         }
         WAVE_FORMAT_G726 => {
@@ -175,12 +166,9 @@ pub(super) fn parse_fmt_chunk(
                 channels,
                 sample_rate,
                 sample_width: MS_BLOCK,
-                adpcm_ms: None,
-                adpcm_ima: None,
+                params: crate::header::CodecParams::None,
                 big_endian,
                 format_tag: format,
-                g726: None,
-                tag0064: None,
             })
         }
         WAVE_FORMAT_ADPCM_MS | WAVE_FORMAT_ADPCM_IMA => {
@@ -232,17 +220,14 @@ pub(super) fn parse_fmt_chunk(
                     channels,
                     sample_rate,
                     sample_width: 1, // unused for ADPCM; blocks drive layout
-                    adpcm_ms: Some(MsAdpcmParams {
+                    params: crate::header::CodecParams::Ms(MsAdpcmParams {
                         block_align,
                         samples_per_block,
                         channels,
                         coefs,
                     }),
-                    adpcm_ima: None,
                     big_endian,
                     format_tag: format,
-                    g726: None,
-                    tag0064: None,
                 })
             } else {
                 // WAVE_FORMAT_ADPCM_IMA - outer match is MS | IMA.
@@ -261,16 +246,13 @@ pub(super) fn parse_fmt_chunk(
                     channels,
                     sample_rate,
                     sample_width: 1,
-                    adpcm_ms: None,
-                    adpcm_ima: Some(ImaAdpcmParams {
+                    params: crate::header::CodecParams::Ima(ImaAdpcmParams {
                         block_align,
                         samples_per_block,
                         channels,
                     }),
                     big_endian,
                     format_tag: format,
-                    g726: None,
-                    tag0064: None,
                 })
             }
         }
@@ -357,7 +339,7 @@ pub(super) fn parse_fmt_chunk(
                         (SampleCodec::ALaw, 1)
                     }
                 }
-                KSDATAFORMAT_SUBTYPE_MULAW => {
+                KSDATAFORMAT_SUBTYPE_MULAW | super::LEGACY_SUBTYPE_MULAW => {
                     if container_bits != 8 {
                         return Err(WavError::format(FormatKind::InvalidSize));
                     }
@@ -383,12 +365,9 @@ pub(super) fn parse_fmt_chunk(
                 channels,
                 sample_rate,
                 sample_width: width,
-                adpcm_ms: None,
-                adpcm_ima: None,
+                params: crate::header::CodecParams::None,
                 big_endian,
                 format_tag: format,
-                g726: None,
-                tag0064: None,
             })
         }
         _ => Err(WavError::unsupported_codec(format)),

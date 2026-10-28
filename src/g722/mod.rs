@@ -112,7 +112,8 @@ pub(crate) fn decode_planar(data: &[u8], channels: usize, mode: ChannelMode) -> 
     };
     let mut out: Vec<Vec<f32>> = (0..n_out).map(|_| vec![0.0f32; frames]).collect();
     let mut decs: Vec<G722Decoder> = (0..channels).map(|_| G722Decoder::new()).collect();
-    decode_into(&mut decs, data, mode, &mut out);
+    let mut planes: Vec<&mut [f32]> = out.iter_mut().map(Vec::as_mut_slice).collect();
+    decode_into(&mut decs, data, mode, &mut planes);
     out
 }
 
@@ -122,7 +123,7 @@ pub(crate) fn decode_into(
     decs: &mut [G722Decoder],
     data: &[u8],
     mode: ChannelMode,
-    out: &mut [Vec<f32>],
+    out: &mut [&mut [f32]],
 ) {
     let ch = decs.len();
     if ch == 0 || data.is_empty() {

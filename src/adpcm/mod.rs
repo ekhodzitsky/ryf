@@ -9,10 +9,7 @@ use crate::ChannelMode;
 use crate::error::{FormatKind, Result, WavError};
 use crate::source::ByteSource;
 
-#[cfg(test)]
-use crate::scrub::{ScrubVec, scrub_vec};
-
-/// MS-ADPCM coefficient pairs stored in the `fmt ` extension (up to 7).
+/// MS-ADPCM coefficient pairs stored in the `fmt ` extension (up to 256).
 #[derive(Debug, Clone)]
 pub(crate) struct MsAdpcmParams {
     pub block_align: u16,
@@ -21,7 +18,7 @@ pub(crate) struct MsAdpcmParams {
     #[allow(dead_code)]
     pub samples_per_block: u16,
     pub channels: usize,
-    /// `(coeff1, coeff2)` pairs; length is `num_coefs` (1..=7).
+    /// `(coeff1, coeff2)` pairs; length is `num_coefs` (1..=256).
     pub coefs: Vec<(i16, i16)>,
 }
 
@@ -78,16 +75,15 @@ pub(super) fn take_block(
 ) -> Result<Option<(&[i16], bool)>> {
     let ch = ch.max(1);
     let frames_this = decoded.len() / ch;
-    if frames_this > max_frames.saturating_sub(frames) {
-        let observed_s = frames.saturating_add(frames_this) as f64 / sample_rate.max(1) as f64;
+    let take = frames_this.min(target.saturating_sub(frames));
+    if take > max_frames.saturating_sub(frames) {
+        let observed_s = frames.saturating_add(take) as f64 / sample_rate.max(1) as f64;
         let max_secs = max_frames as f64 / sample_rate.max(1) as f64;
         return Err(WavError::too_long(observed_s, max_secs));
     }
-    let room = target.saturating_sub(frames);
-    if room == 0 {
+    if take == 0 {
         return Ok(None);
     }
-    let take = frames_this.min(room);
     Ok(Some((&decoded[..take * ch], take < frames_this)))
 }
 
@@ -161,7 +157,7 @@ pub(crate) fn decode_ms_adpcm(
         .saturating_mul(params.samples_per_block as usize)
         .min(max_frames)
         .saturating_mul(ch);
-    let mut out: ScrubVec<i16> = scrub_vec(Vec::new());
+    let mut out: Vec<i16> = Vec::new();
     out.try_reserve(hint)
         .map_err(|_| WavError::format(FormatKind::Adpcm))?;
     for_each_ms_adpcm_block(
@@ -220,7 +216,7 @@ fn decode_ms_block_mono(block: &[u8], coefs: &[(i16, i16)], be: bool) -> Result<
                 nibble
             };
             let mut pred =
-                (i32::from(hist1) * i32::from(c1) + i32::from(hist2) * i32::from(c2)) >> 8;
+                ((i64::from(hist1) * i64::from(c1) + i64::from(hist2) * i64::from(c2)) >> 8) as i32;
             pred += signed_nibble * i32::from(delta);
             let sample = clamp_i16(pred);
             delta = adapt_ms_delta(delta, nibble);
@@ -260,8 +256,9 @@ fn decode_ms_block_stereo(block: &[u8], coefs: &[(i16, i16)], be: bool) -> Resul
         let nibbles = [((byte >> 4) & 0x0f) as i32, (byte & 0x0f) as i32];
         for (c, &nibble) in nibbles.iter().enumerate() {
             let (c1, c2) = coefs[predictor[c] as usize];
-            let mut pred =
-                (i32::from(hist1[c]) * i32::from(c1) + i32::from(hist2[c]) * i32::from(c2)) >> 8;
+            let mut pred = ((i64::from(hist1[c]) * i64::from(c1)
+                + i64::from(hist2[c]) * i64::from(c2))
+                >> 8) as i32;
             let signed_nibble = if nibble & 0x8 != 0 {
                 nibble - 0x10
             } else {

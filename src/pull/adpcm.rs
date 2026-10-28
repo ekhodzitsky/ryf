@@ -78,15 +78,13 @@ pub(crate) fn decode_adpcm_interleaved(
     match fmt.codec {
         SampleCodec::MsAdpcm => {
             let params = fmt
-                .adpcm_ms
-                .as_ref()
+                .ms_params()
                 .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             decode_ms_adpcm(mss, params, data_len, max_samples)
         }
         SampleCodec::ImaAdpcm => {
             let params = fmt
-                .adpcm_ima
-                .as_ref()
+                .ima_params()
                 .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             decode_ima_adpcm(mss, params, data_len, max_samples)
         }
@@ -110,12 +108,11 @@ fn visit_adpcm(
     plan: &DecodePlan,
     on_block: impl FnMut(&[i16]) -> Result<()>,
 ) -> Result<usize> {
-    match plan.codec {
+    match plan.fmt.codec {
         SampleCodec::MsAdpcm => {
             let params = plan
                 .fmt
-                .adpcm_ms
-                .as_ref()
+                .ms_params()
                 .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             for_each_ms_adpcm_block(
                 mss,
@@ -124,15 +121,14 @@ fn visit_adpcm(
                 plan.max_samples,
                 plan.total_frames,
                 plan.sample_rate,
-                plan.big_endian,
+                plan.fmt.big_endian,
                 on_block,
             )
         }
         SampleCodec::ImaAdpcm => {
             let params = plan
                 .fmt
-                .adpcm_ima
-                .as_ref()
+                .ima_params()
                 .ok_or_else(|| WavError::format(FormatKind::Adpcm))?;
             for_each_ima_adpcm_block(
                 mss,
@@ -141,7 +137,7 @@ fn visit_adpcm(
                 plan.max_samples,
                 plan.total_frames,
                 plan.sample_rate,
-                plan.big_endian,
+                plan.fmt.big_endian,
                 on_block,
             )
         }
@@ -158,7 +154,7 @@ pub(super) fn collect_adpcm(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Resu
     }
     #[cfg(feature = "adpcm")]
     {
-        let ch = plan.channels.max(1);
+        let ch = plan.fmt.channels.max(1);
         let n_out = match plan.mode {
             ChannelMode::Mono => 1,
             ChannelMode::Split => ch,
@@ -193,7 +189,7 @@ where
     }
     #[cfg(feature = "adpcm")]
     {
-        let ch = plan.channels.max(1);
+        let ch = plan.fmt.channels.max(1);
         let sample_rate = plan.sample_rate;
         let mode = plan.mode;
         visit_adpcm(mss, plan, |interleaved| {
