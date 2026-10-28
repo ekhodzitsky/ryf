@@ -102,6 +102,7 @@ fn test_adpcm_ffmpeg_files_smoke() {
 /// absolute error rather than bit-exact equality.
 #[cfg(feature = "adpcm")]
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn test_adpcm_ffmpeg_max_abs_parity() -> Result<()> {
     if !ffmpeg_available() {
         eprintln!("ffmpeg/ffprobe not available, skipping ADPCM parity");
