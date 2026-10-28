@@ -299,7 +299,8 @@ impl G726Decoder {
         self.packing
     }
 
-    /// Bits held that do not yet form a codeword (`0..bits`).
+    /// Unused input bits (0..=7). When the output buffer fills, these may
+    /// include complete codewords; drain them with `push(&[], out)`.
     pub fn pending_bits(&self) -> u8 {
         self.unpack.pending_bits()
     }
@@ -327,7 +328,8 @@ impl G726Decoder {
         (produced, consumed)
     }
 
-    /// Drop a partial trailing codeword. The predictor is unchanged.
+    /// Discard all pending bits. Drain complete codewords with `push(&[], out)`
+    /// first, or they are discarded too. The predictor is unchanged.
     /// Returns how many bits were discarded.
     pub fn finish(&mut self) -> u8 {
         let n = self.unpack.pending_bits();

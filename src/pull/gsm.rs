@@ -1,39 +1,34 @@
 //! Microsoft GSM 06.10 pull / collect (65-byte blocks to 320 PCM frames).
 
-use super::{DecodePlan, check_duration, emit_mono_block, pcm_short, scratch_frames};
-use crate::error::{Result, WavError};
+use super::{DecodePlan, check_duration, emit_mono_block};
+use crate::error::Result;
 use crate::gsm::{self, GsmDecoder, MS_BLOCK, MS_SAMPLES};
-use crate::scrub::scrub_vec;
 use crate::source::ByteSource;
 
 pub(super) fn collect_gsm(mss: &mut ByteSource<'_>, plan: &DecodePlan) -> Result<Vec<Vec<f32>>> {
-    let total = plan.total_frames;
-    if total > plan.max_samples {
-        check_duration(total, plan.max_samples, plan.sample_rate)?;
-    }
-    if total == 0 {
-        return Ok(super::empty_planes(plan.mode, 1));
-    }
-    let n_blocks = total.div_ceil(MS_SAMPLES);
-    let need = n_blocks.saturating_mul(MS_BLOCK);
-    let mut plane = if let Some(rest) = mss.remaining_slice() {
-        if rest.len() < need {
-            return Err(pcm_short("wav: short gsm data"));
-        }
-        gsm::decode_mono_f32(&rest[..need])
-    } else {
-        let mut owned = scrub_vec(vec![0u8; need]);
-        mss.read_buf_exact(&mut owned)
-            .map_err(WavError::packet_io)?;
-        gsm::decode_mono_f32(&owned)
-    };
-    plane.truncate(total);
-    if mss.remaining_slice().is_some() {
-        mss.advance(need as u64).map_err(WavError::packet_io)?;
-    }
-    Ok(vec![plane])
+    check_duration(plan.total_frames, plan.max_samples, plan.sample_rate)?;
+    let mut out = vec![0.0; plan.total_frames];
+    let mut decoder = GsmDecoder::new();
+    let mut pcm = [0i16; MS_SAMPLES];
+    let mut offset = 0;
+    super::input::for_each_input(
+        mss,
+        plan.total_frames.div_ceil(MS_SAMPLES),
+        MS_BLOCK,
+        usize::MAX,
+        plan.sample_rate,
+        |bytes, _| {
+            for block in bytes.as_chunks::<MS_BLOCK>().0 {
+                decoder.decode_ms_block(block, &mut pcm);
+                let n = MS_SAMPLES.min(plan.total_frames - offset);
+                gsm::scale_i16(&mut out[offset..offset + n], &pcm[..n]);
+                offset += n;
+            }
+            Ok(())
+        },
+    )?;
+    Ok(vec![out])
 }
-
 pub(super) fn pull_gsm<F>(
     mss: &mut ByteSource<'_>,
     plan: &DecodePlan,
@@ -42,44 +37,30 @@ pub(super) fn pull_gsm<F>(
 where
     F: FnMut(super::StreamBlock<'_>) -> Result<()>,
 {
-    let total = plan.total_frames;
-    if total > plan.max_samples {
-        check_duration(total, plan.max_samples, plan.sample_rate)?;
-    }
-    if total == 0 {
-        return Ok(0);
-    }
-    let n_blocks = total.div_ceil(MS_SAMPLES);
-    let need = n_blocks.saturating_mul(MS_BLOCK);
-    let rate = plan.sample_rate;
+    check_duration(plan.total_frames, plan.max_samples, plan.sample_rate)?;
     let mut pull = GsmPull {
         dec: GsmDecoder::new(),
-        pcm: [0i16; MS_SAMPLES],
-        scratch: [0.0f32; MS_SAMPLES],
+        pcm: [0; MS_SAMPLES],
+        scratch: [0.0; MS_SAMPLES],
     };
-
-    if let Some(rest) = mss.remaining_slice() {
-        if rest.len() < need {
-            return Err(pcm_short("wav: short gsm data"));
-        }
-        let mut decoded = 0usize;
-        let n = pull.emit(&rest[..need], total, &mut decoded, rate, on_block)?;
-        mss.advance(need as u64).map_err(WavError::packet_io)?;
-        return Ok(n);
-    }
-
-    let block_n = scratch_frames(MS_BLOCK, n_blocks).max(1);
-    let mut raw = scrub_vec(vec![0u8; block_n * MS_BLOCK]);
-    let mut decoded = 0usize;
-    let mut left = n_blocks;
-    while left > 0 {
-        let this = left.min(block_n);
-        let want = this * MS_BLOCK;
-        mss.read_buf_exact(&mut raw[..want])
-            .map_err(WavError::packet_io)?;
-        pull.emit(&raw[..want], total, &mut decoded, rate, on_block)?;
-        left -= this;
-    }
+    let mut decoded = 0;
+    super::input::for_each_input(
+        mss,
+        plan.total_frames.div_ceil(MS_SAMPLES),
+        MS_BLOCK,
+        usize::MAX,
+        plan.sample_rate,
+        |raw, _| {
+            pull.emit(
+                raw,
+                plan.total_frames,
+                &mut decoded,
+                plan.sample_rate,
+                on_block,
+            )?;
+            Ok(())
+        },
+    )?;
     Ok(decoded)
 }
 

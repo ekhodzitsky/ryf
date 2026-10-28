@@ -12,6 +12,9 @@ env:
 
 jobs:
   lint:
+    strategy:
+      matrix:
+        features: ["", "--no-default-features", "--all-features"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +23,7 @@ jobs:
           toolchain: "1.88.0"
           components: rustfmt, clippy
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
 
   test:
     strategy:
@@ -56,3 +59,57 @@ jobs:
           --ignore-filename-regex '_tests|proptest'
           --fail-under-lines 90
           -- --skip proptest
+
+  features:
+    strategy:
+      matrix:
+        features:
+          - "--no-default-features"
+          - "--no-default-features --features adpcm"
+          - "--no-default-features --features simd"
+          - "--all-features"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: cargo test --locked ${{ matrix.features }}
+
+  distribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+      - run: cargo package --locked
+      - run: cargo bench --bench wav --features bench-c -- --test
+      - name: Default dependency boundary
+        run: test "$(cargo tree --edges normal,build --prefix none | wc -l)" -eq 1
+
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - run: cargo miri setup
+      - run: cargo miri test --lib custom_adpcm_coefficients_do_not_overflow
+      - run: cargo miri test --lib writer_failure_is_terminal_and_drop_does_not_mutate
+      - run: cargo miri test --lib collect_cursor_short_and_duration
+
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88.0"
+          targets: wasm32-unknown-unknown
+      - run: cargo check --lib --no-default-features --target wasm32-unknown-unknown

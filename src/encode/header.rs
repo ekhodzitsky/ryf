@@ -11,9 +11,6 @@ pub(super) const MAX_CHANNELS: u16 = 26;
 pub(super) const PCM_RIFF_PREFIX: u32 = 36;
 /// `fmt ` 18 + `fact` 4 (IEEE f32 and G.711).
 pub(super) const FACT_RIFF_PREFIX: u32 = 50;
-pub(super) const PCM_DATA_LEN_POS: u64 = 40;
-pub(super) const FACT_DATA_LEN_POS: u64 = 54;
-pub(super) const FACT_FRAMES_POS: u64 = 46;
 
 pub(super) fn u32_len(n: usize) -> Result<u32> {
     u32::try_from(n).map_err(|_| WavError::RiffTooLarge)
@@ -42,18 +39,6 @@ pub(super) fn riff_prefix(spec: WriteSpec) -> u32 {
     } else {
         PCM_RIFF_PREFIX
     }
-}
-
-pub(super) fn data_len_pos(spec: WriteSpec) -> u64 {
-    if spec.format.has_fact() {
-        FACT_DATA_LEN_POS
-    } else {
-        PCM_DATA_LEN_POS
-    }
-}
-
-pub(super) fn fact_frames_pos(spec: WriteSpec) -> Option<u64> {
-    spec.format.has_fact().then_some(FACT_FRAMES_POS)
 }
 
 fn u16b(v: u16, be: bool) -> [u8; 2] {
@@ -124,14 +109,6 @@ pub(super) fn rf64_header_len(spec: WriteSpec) -> u64 {
     // RF64+WAVE (12) + ds64 (36) + fmt + optional fact + data hdr (8).
     if spec.format.has_fact() { 94 } else { 80 }
 }
-
-pub(super) const RF64_RIFF_SIZE_POS: u64 = 20;
-pub(super) const RF64_DATA_SIZE_POS: u64 = 28;
-pub(super) const RF64_SAMPLE_COUNT_POS: u64 = 36;
-/// `fact` sampleCount in an RF64 IEEE / G.711 header (after ds64 + WAVEFORMATEX).
-pub(super) const RF64_FACT_FRAMES_POS: u64 = 82;
-/// `fact` sampleCount after ds64 + 40-byte extensible `fmt `.
-pub(super) const RF64_EXTENSIBLE_FACT_FRAMES_POS: u64 = 104;
 
 pub(super) fn push_rf64_header(
     out: &mut Vec<u8>,
@@ -226,14 +203,6 @@ pub(super) fn extensible_riff_prefix(spec: WriteSpec) -> u32 {
     if spec.format.has_fact() { 72 } else { 60 }
 }
 
-pub(super) fn extensible_data_len_pos(spec: WriteSpec) -> u64 {
-    if spec.format.has_fact() { 76 } else { 64 }
-}
-
-pub(super) fn extensible_fact_frames_pos(spec: WriteSpec) -> Option<u64> {
-    spec.format.has_fact().then_some(68)
-}
-
 fn push_extensible_body(
     out: &mut Vec<u8>,
     spec: WriteSpec,
@@ -307,16 +276,4 @@ pub(super) fn push_rf64_extensible_header(
     out.extend_from_slice(&frames.to_le_bytes());
     out.extend_from_slice(&0u32.to_le_bytes());
     push_extensible_body(out, spec, u32::MAX, frames.min(u64::from(u32::MAX)) as u32)
-}
-
-/// Reverse each sample container (LE payload to RIFX data bytes). Width 1 is a copy.
-pub(super) fn swap_sample_bytes(pcm: &[u8], width: usize) -> Vec<u8> {
-    if width <= 1 {
-        return pcm.to_vec();
-    }
-    let mut out = pcm.to_vec();
-    for chunk in out.chunks_exact_mut(width) {
-        chunk.reverse();
-    }
-    out
 }

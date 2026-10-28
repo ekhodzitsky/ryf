@@ -1,6 +1,6 @@
 [package]
 name = "ryf"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -45,3 +45,11 @@ harness = false
 [package.metadata.docs.rs]
 # Default features only - `bench-c` needs a C compiler and vendored dr_wav.
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

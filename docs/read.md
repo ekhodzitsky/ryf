@@ -26,7 +26,8 @@ Also:
   longer than 22)
 - `TooLong` is decided from **bytes on disk**, not a lying `fact` / `ds64`
 - RF64 `ds64` size table (EBU Tech 3306) sizes non-`data` `0xFFFFFFFF`
-  chunks. Wave64 `data` length is `chunk_size - 24`; pad bytes stuffed
+  chunks (up to 4096 size-table records; larger or incomplete tables are
+  rejected as `MalformedChunk`). Repeated IDs consume entries in order. Wave64 `data` length is `chunk_size - 24`; pad bytes stuffed
   into that size are PCM (ffmpeg)
 
 Headerless G.711 (rate and channel count stated by the caller):
@@ -66,7 +67,9 @@ codeword stream. This tag does not consult `Tag0064`. Antex tags
 
 `G726Decoder` keeps the predictor and at most 7 unused input bits.
 `push` writes into the caller buffer and does not allocate. `finish`
-drops a partial codeword without touching the predictor. `reset` restores
+discards all pending bits without touching the predictor. A full output
+buffer may leave complete words pending: drain them with `push(&[], out)`
+before `finish` to avoid losing them. `reset` restores
 the initial predictor and an empty bit buffer. WAVE streaming reads a
 fixed scratch window, not the whole compressed file. Duration, sample-rate,
 and output-byte caps apply to headerless decode and to WAVE collect and
@@ -80,11 +83,25 @@ variable block sizes (41-64) are not decoded.
 From a path: `read` (split, archival caps) / `read_speech` (mix, 2 h;
 duration uses min(file rate, 48 kHz)) / `read_with`. Mono PCM16 / mixed
 f32 helpers: `read_s16` / `read_f32`. From a `File` or any
-`Read + Seek + Send`: `ByteSource::from_file` / `from_read_seek` +
-`decode_with`. From a buffer: `decode_bytes`. From `impl Read` (slurp):
+`Read + Seek + Send`: `ByteSource::try_from_file` / `try_from_read_seek` +
+`decode_with`. These constructors report length/rewind errors. The original
+`from_file` / `from_read_seek` constructors retain best-effort initialization
+for compatibility; they cannot promise rewind when the underlying seek fails. From a buffer: `decode_bytes`. From `impl Read` (slurp):
 `decode_reader`. Streaming: `decode_streaming`. Probe: `probe` (library
 defaults) / `probe_with`. Sniff: `sniff_wav`.
 
 `decode_bytes` / `read` of an empty `data` chunk return 0 frames (one
 empty plane if mixed). `decode_f32` / `decode_s16` / headerless G.711 /
 G.722 / G.726 / GSM return `WavError::Empty`.
+
+For malformed PCM with an incomplete final frame, general planar decode drops
+that tail. `decode_s16` / `read_s16` are strict raw-PCM helpers and reject odd
+payload lengths. `decode_f32` / `read_f32` also reject an empty decoded result.
+
+Extensible mu-law uses the standard `00000007-0000-0010-8000-00aa00389b71`
+GUID on write. Decode also accepts the legacy Data1=4 GUID emitted by earlier
+ryf versions. This compatibility alias is never emitted by new encoders.
+
+A streaming callback may have consumed blocks before returning an error.
+The source cursor can already have advanced; explicitly rewind before
+retrying a complete decode. Callback data remains borrowed for that call only.

@@ -45,7 +45,7 @@ pub(super) fn pull_framed<F>(
 where
     F: FnMut(super::StreamBlock<'_>) -> Result<()>,
 {
-    let n = match plan.codec {
+    let n = match plan.fmt.codec {
         SampleCodec::G722 => g722::pull_g722(mss, plan, on_block)?,
         SampleCodec::Gsm => gsm::pull_gsm(mss, plan, on_block)?,
         SampleCodec::G726 => super::g726::pull_g726(mss, plan, on_block)?,
@@ -58,7 +58,7 @@ pub(super) fn collect_framed(
     mss: &mut ByteSource<'_>,
     plan: &DecodePlan,
 ) -> Result<Option<Vec<Vec<f32>>>> {
-    let planes = match plan.codec {
+    let planes = match plan.fmt.codec {
         SampleCodec::G722 => g722::collect_g722(mss, plan)?,
         SampleCodec::Gsm => gsm::collect_gsm(mss, plan)?,
         SampleCodec::G726 => super::g726::collect_g726(mss, plan)?,
@@ -68,8 +68,7 @@ pub(super) fn collect_framed(
 }
 
 fn g726_bits(fmt: &FmtFields) -> Result<u8> {
-    fmt.g726
-        .as_ref()
+    fmt.g726_params()
         .map(|p| p.bits)
         .filter(|b| (2..=5).contains(b))
         .ok_or_else(|| WavError::format(FormatKind::InvalidSize))

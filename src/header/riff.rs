@@ -88,7 +88,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
     let mut fmt: Option<FmtFields> = None;
     let mut ds64_data_size: Option<u64> = None;
     let mut ds64_sample_count: Option<u64> = None;
-    let mut ds64_table: Vec<([u8; 4], u64)> = Vec::new();
+    let mut ds64_table = super::size_table::ChunkSizes::default();
     let mut fact_sample_count: Option<u64> = None;
     let mut saw_ds64 = false;
     // First `data` payload when it appears before `fmt `.
@@ -130,11 +130,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
         // (JUNK/LIST/...) use the ds64 size table (EBU Tech 3306).
         let mut chunk_len = u64::from(chunk_len_u32);
         if chunk_len_u32 == u32::MAX && tag != *b"ds64" && tag != *b"data" && tag != *b"fmt " {
-            chunk_len = ds64_table
-                .iter()
-                .find(|(id, _)| id == &tag)
-                .map(|(_, sz)| *sz)
-                .ok_or_else(|| WavError::format(FormatKind::MalformedChunk))?;
+            chunk_len = ds64_table.take(tag)?;
         }
 
         if let Some(len) = riff_data_len
@@ -164,17 +160,7 @@ fn parse_header_inner(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
                 let table_len = mss.read_u32().map_err(eof_trunc)?;
                 // tableLength entries of chunkId (4) + chunkSize (8).
                 let rest = chunk_len.saturating_sub(28);
-                let n_entries = table_len.min(32).min((rest / 12) as u32);
-                ds64_table.clear();
-                for _ in 0..n_entries {
-                    let id = mss.read_quad_bytes().map_err(eof_trunc)?;
-                    let sz = read_u64_le(mss)?;
-                    ds64_table.push((id, sz));
-                }
-                let read = u64::from(n_entries).saturating_mul(12);
-                if rest > read {
-                    mss.ignore_bytes(rest - read).map_err(eof_trunc)?;
-                }
+                ds64_table = super::size_table::ChunkSizes::read(mss, table_len, rest)?;
                 // riffSize is the size of the RF64 chunk body after the first 8 bytes,
                 // i.e. same meaning as the RIFF chunk size field: data after the form is riffSize-4.
                 if riff_size >= 4 {
@@ -335,9 +321,11 @@ fn parse_header_w64(mss: &mut ByteSource<'_>) -> Result<WavHeader> {
             if data_len > u64::from(u32::MAX) {
                 return Err(WavError::format(FormatKind::MalformedChunk));
             }
-            let mut f = parse_fmt_chunk(mss, data_len as u32, false)?;
-            f.big_endian = false;
-            fmt = Some(f);
+            if fmt.is_some() {
+                mss.ignore_bytes(data_len).map_err(eof_trunc)?;
+            } else {
+                fmt = Some(parse_fmt_chunk(mss, data_len as u32, false)?);
+            }
         } else if guid == W64_GUID_FACT {
             if data_len < 4 {
                 return Err(WavError::format(FormatKind::MalformedChunk));

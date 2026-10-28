@@ -14,10 +14,16 @@
   (`PROVENANCE.txt`). A longer live encode (silence, a step, then a 440 Hz
   tone) runs when `ffmpeg` is on `PATH`.
 - SIMD paths match scalar bit-for-bit.
-- `unsafe` is confined to `convert/simd.rs`, G.711 `u8` table lookup, and
-  uninit `f32` scratch (Copy, every element written before `Ok`); each
-  block has a SAFETY comment.
-- CI: Ubuntu (ffmpeg oracle), macOS, Windows. Impl line coverage >= 90%.
+- Output buffers are initialized before safe slice access. Unsafe code is
+  denied by default; narrow exceptions cover SIMD dispatch/kernels and
+  checked initialized-f32 byte views. G.711 table lookup is safe indexing.
+- Encoder fingerprints cover every PCM16 input for both G.711 laws.
+  Structured malformed MS-ADPCM cases exercise arbitrary coefficients.
+  Writer fault injection covers partial writes, reads, seeks, and flushes,
+  terminal failures, validation ordering, and file-backed RF64 promotion.
+- CI: Ubuntu (ffmpeg oracle), macOS, Windows; independent feature combinations,
+  default and feature-off lints, strict rustdoc, package verification,
+  benchmark smoke, and focused Miri tests. Impl line coverage >= 90%.
 - Speed peers and other WAVE crates: [compare.md](compare.md),
   [benchmarks.md](benchmarks.md).
 

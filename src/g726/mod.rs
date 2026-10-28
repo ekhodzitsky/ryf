@@ -175,10 +175,23 @@ pub fn decode_g726(
     sample_count: Option<usize>,
     opts: &DecodeOptions,
 ) -> Result<DecodedWav> {
-    let pcm = decode_i16(data, rate, packing, sample_count, opts)?;
-    let mut plane = vec![0.0f32; pcm.len()];
-    for (dst, sample) in plane.iter_mut().zip(pcm.iter()) {
-        *dst = f32::from(*sample) * I16_SCALE;
+    let frames = decode_frames(data, rate, sample_count, opts)?;
+    let mut plane = vec![0.0f32; frames];
+    let mut dec = G726Decoder::new(rate, packing);
+    let mut scratch = [0i16; 4096];
+    let mut offset = 0;
+    let mut consumed = 0;
+    while offset < frames {
+        let want = (frames - offset).min(scratch.len());
+        let (n, used) = dec.push(&data[consumed..], &mut scratch[..want]);
+        if n == 0 {
+            return Err(WavError::format(FormatKind::InvalidSize));
+        }
+        for (dst, sample) in plane[offset..offset + n].iter_mut().zip(&scratch[..n]) {
+            *dst = f32::from(*sample) * I16_SCALE;
+        }
+        offset += n;
+        consumed += used;
     }
     Ok(DecodedWav {
         sample_rate: RATE,
@@ -191,13 +204,12 @@ pub fn decode_g726_mono(data: &[u8], rate: G726Rate, packing: G726Packing) -> Re
     decode_g726(data, rate, packing, None, &DecodeOptions::speech())
 }
 
-pub(crate) fn decode_i16(
+fn decode_frames(
     data: &[u8],
     rate: G726Rate,
-    packing: G726Packing,
     sample_count: Option<usize>,
     opts: &DecodeOptions,
-) -> Result<Vec<i16>> {
+) -> Result<usize> {
     if data.is_empty() {
         return Err(WavError::Empty);
     }
@@ -228,8 +240,20 @@ pub(crate) fn decode_i16(
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));
     }
+    Ok(frames)
+}
+
+#[cfg(test)]
+pub(crate) fn decode_i16(
+    data: &[u8],
+    rate: G726Rate,
+    packing: G726Packing,
+    sample_count: Option<usize>,
+    opts: &DecodeOptions,
+) -> Result<Vec<i16>> {
+    let frames = decode_frames(data, rate, sample_count, opts)?;
     let mut dec = G726Decoder::new(rate, packing);
-    let mut pcm = vec![0i16; frames];
+    let mut pcm = vec![0; frames];
     let (got, _) = dec.push(data, &mut pcm);
     if got != frames {
         return Err(WavError::format(FormatKind::InvalidSize));

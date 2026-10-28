@@ -1,137 +1,107 @@
-//! Incremental WAVE writer (RIFF, RF64, RIFX, or WAVEFORMATEXTENSIBLE).
-//! Sizes are patched on [`WavWriter::finalize`] or on drop.
-//! Classic RIFF auto-promotes to RF64 when the payload would overflow `u32`.
-
-use std::fs::File;
+//! Incremental WAVE writer with terminal I/O failures.
+use super::{WriteFormat, WriteSpec, header::frame_bytes, layout::Layout};
+use crate::{FormatKind, Result, WavError};
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use super::header::{
-    RF64_DATA_SIZE_POS, RF64_EXTENSIBLE_FACT_FRAMES_POS, RF64_FACT_FRAMES_POS, RF64_RIFF_SIZE_POS,
-    RF64_SAMPLE_COUNT_POS, data_len_pos, extensible_data_len_pos, extensible_fact_frames_pos,
-    extensible_riff_prefix, fact_frames_pos, frame_bytes, needs_rf64, padded_data_len,
-    push_extensible_header, push_header, push_rf64_extensible_header, push_rf64_header,
-    push_rifx_header, rf64_extensible_header_len, rf64_header_len, riff_body_len, riff_prefix,
-    swap_sample_bytes, u32_len, validate_spec,
-};
-use super::{WriteFormat, WriteSpec};
-use crate::error::{FormatKind, Result, WavError};
-
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum WriterKind {
-    Riff,
-    Rf64,
-    Rf64Extensible,
-    Rifx,
-    Extensible,
+enum State {
+    Open,
+    Finalized,
+    Failed,
 }
 
-/// Streaming WAVE writer. Header sizes are placeholders until [`Self::finalize`]
-/// (also attempted on drop, errors swallowed).
+/// Streaming WAVE writer. Sizes are patched on [`Self::finalize`].
+/// Drop attempts finalization only while open and cannot report errors.
+/// After an I/O failure the writer is terminal: discard the incomplete file.
+/// Validation failures before any I/O leave it usable.
 pub struct WavWriter<W: Read + Write + Seek> {
     inner: W,
     spec: WriteSpec,
     data_bytes: u64,
-    finalized: bool,
-    odd_padded: bool,
-    kind: WriterKind,
+    state: State,
+    layout: Layout,
 }
 
 impl WavWriter<File> {
-    /// Create `path` and write a WAVE header with a zero-length `data` chunk.
+    /// Validate the specification, then create or truncate a RIFF file.
+    /// The file is opened for reading too, allowing later RF64 promotion.
     pub fn create(path: &Path, spec: WriteSpec) -> Result<Self> {
-        Self::new(File::create(path)?, spec)
+        Self::create_layout(path, spec, Layout::Riff)
     }
-
-    /// Create `path` as RF64 (sizes in `ds64`; no 4 GiB cap).
+    /// Validate, then create or truncate a forced RF64 file.
     pub fn create_rf64(path: &Path, spec: WriteSpec) -> Result<Self> {
-        Self::new_rf64(File::create(path)?, spec)
+        Self::create_layout(path, spec, Layout::Rf64)
     }
-
-    /// Create `path` as RIFX (big-endian sizes and sample containers).
+    /// Validate, then create or truncate a RIFX file.
     pub fn create_rifx(path: &Path, spec: WriteSpec) -> Result<Self> {
-        Self::new_rifx(File::create(path)?, spec)
+        Self::create_layout(path, spec, Layout::Rifx)
     }
-
-    /// Create `path` as `WAVEFORMATEXTENSIBLE` (PCM / IEEE / G.711).
+    /// Validate, then create or truncate a WAVEFORMATEXTENSIBLE file.
     pub fn create_extensible(path: &Path, spec: WriteSpec) -> Result<Self> {
-        Self::new_extensible(File::create(path)?, spec)
+        Self::create_layout(path, spec, Layout::Extensible)
+    }
+    fn create_layout(path: &Path, spec: WriteSpec, layout: Layout) -> Result<Self> {
+        let header = layout.header(spec, 0)?;
+        let file = OpenOptions::new()
+            .read(matches!(layout, Layout::Riff | Layout::Extensible))
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)?;
+        Self::start(file, spec, layout, &header)
     }
 }
 
 impl<W: Read + Write + Seek> WavWriter<W> {
-    /// Write a WAVE header with a zero-length `data` chunk onto `inner`.
-    /// Promotes to RF64 on write if sizes would overflow `u32`.
-    pub fn new(mut inner: W, spec: WriteSpec) -> Result<Self> {
-        validate_spec(spec)?;
-        let mut header = Vec::with_capacity(58);
-        push_header(&mut header, spec, 0)?;
-        inner.write_all(&header)?;
-        Ok(Self {
-            inner,
-            spec,
-            data_bytes: 0,
-            finalized: false,
-            odd_padded: false,
-            kind: WriterKind::Riff,
-        })
+    /// Write a RIFF header at cursor zero; nonzero origins are rejected before
+    /// writing. The sink should be empty (generic sinks are not truncated).
+    /// Promotes to RF64 when sizes overflow; relocation reads the existing data.
+    pub fn new(inner: W, spec: WriteSpec) -> Result<Self> {
+        Self::new_layout(inner, spec, Layout::Riff)
     }
-
-    /// Write an RF64 header (`ds64` + `0xFFFFFFFF` sizes) onto `inner`.
-    pub fn new_rf64(mut inner: W, spec: WriteSpec) -> Result<Self> {
-        validate_spec(spec)?;
-        let mut header = Vec::with_capacity(94);
-        push_rf64_header(&mut header, spec, 0, 0)?;
-        inner.write_all(&header)?;
-        Ok(Self {
-            inner,
-            spec,
-            data_bytes: 0,
-            finalized: false,
-            odd_padded: false,
-            kind: WriterKind::Rf64,
-        })
+    /// Write a forced RF64 header. Same cursor requirements as [`Self::new`].
+    pub fn new_rf64(inner: W, spec: WriteSpec) -> Result<Self> {
+        Self::new_layout(inner, spec, Layout::Rf64)
     }
-
-    /// Write a RIFX header. `write_pcm` takes the same little-endian payload
-    /// as [`crate::encode_rifx`].
-    pub fn new_rifx(mut inner: W, spec: WriteSpec) -> Result<Self> {
-        validate_spec(spec)?;
-        let mut header = Vec::with_capacity(58);
-        push_rifx_header(&mut header, spec, 0)?;
-        inner.write_all(&header)?;
-        Ok(Self {
-            inner,
-            spec,
-            data_bytes: 0,
-            finalized: false,
-            odd_padded: false,
-            kind: WriterKind::Rifx,
-        })
+    /// Write RIFX. Input PCM remains little-endian. See [`Self::new`].
+    pub fn new_rifx(inner: W, spec: WriteSpec) -> Result<Self> {
+        Self::new_layout(inner, spec, Layout::Rifx)
     }
-
-    /// Write a `WAVEFORMATEXTENSIBLE` header (PCM / IEEE / G.711).
-    /// Promotes to RF64 on write if sizes would overflow `u32`.
-    pub fn new_extensible(mut inner: W, spec: WriteSpec) -> Result<Self> {
-        validate_spec(spec)?;
-        let mut header = Vec::with_capacity(80);
-        push_extensible_header(&mut header, spec, 0)?;
-        inner.write_all(&header)?;
-        Ok(Self {
-            inner,
-            spec,
-            data_bytes: 0,
-            finalized: false,
-            odd_padded: false,
-            kind: WriterKind::Extensible,
-        })
+    /// Write WAVEFORMATEXTENSIBLE, promoting to RF64 on size overflow.
+    /// Same cursor requirements as [`Self::new`].
+    pub fn new_extensible(inner: W, spec: WriteSpec) -> Result<Self> {
+        Self::new_layout(inner, spec, Layout::Extensible)
     }
-
-    /// Append interleaved PCM bytes (`format` width x channels per frame).
-    pub fn write_pcm(&mut self, pcm: &[u8]) -> Result<()> {
-        if self.finalized {
+    fn new_layout(inner: W, spec: WriteSpec, layout: Layout) -> Result<Self> {
+        let header = layout.header(spec, 0)?;
+        Self::start(inner, spec, layout, &header)
+    }
+    fn start(mut inner: W, spec: WriteSpec, layout: Layout, header: &[u8]) -> Result<Self> {
+        if inner.stream_position()? != 0 {
             return Err(WavError::format(FormatKind::InvalidOperation));
         }
+        inner.write_all(header)?;
+        Ok(Self {
+            inner,
+            spec,
+            data_bytes: 0,
+            state: State::Open,
+            layout,
+        })
+    }
+    fn require_open(&self) -> Result<()> {
+        if self.state != State::Open {
+            Err(WavError::format(FormatKind::InvalidOperation))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Append whole interleaved frames. Any I/O error makes the writer terminal.
+    pub fn write_pcm(&mut self, pcm: &[u8]) -> Result<()> {
+        self.require_open()?;
         let fb = frame_bytes(self.spec)?;
         if !pcm.len().is_multiple_of(fb) {
             return Err(WavError::OddPcm);
@@ -140,218 +110,141 @@ impl<W: Read + Write + Seek> WavWriter<W> {
             .data_bytes
             .checked_add(pcm.len() as u64)
             .ok_or(WavError::RiffTooLarge)?;
-        match self.kind {
-            WriterKind::Riff if needs_rf64(self.spec, next) => self.promote_to_rf64()?,
-            WriterKind::Rifx if overflow(riff_prefix(self.spec), next) => {
-                return Err(WavError::RiffTooLarge);
-            }
-            WriterKind::Extensible if overflow(extensible_riff_prefix(self.spec), next) => {
-                self.promote_to_rf64()?;
-            }
-            _ => {}
+        let promote = self.layout.overflows(self.spec, next);
+        let target = if promote {
+            self.layout.promoted()
+        } else {
+            self.layout
+        };
+        target.file_len(self.spec, next)?;
+        if promote && self.layout == Layout::Rifx {
+            return Err(WavError::RiffTooLarge);
         }
-        if self.kind == WriterKind::Rifx {
-            let swapped = swap_sample_bytes(pcm, self.spec.format.bytes_per_sample());
-            self.inner.write_all(&swapped)?;
+        // Set the terminal state before the first mutation; only full success
+        // restores Open. A short write/seek may already have changed the sink.
+        self.state = State::Failed;
+        if promote {
+            self.promote_to_rf64()?;
+        }
+        if self.layout == Layout::Rifx {
+            let width = self.spec.format.bytes_per_sample();
+            let mut scratch = [0u8; 8192];
+            let chunk = scratch.len() / fb * fb;
+            for input in pcm.chunks(chunk) {
+                scratch[..input.len()].copy_from_slice(input);
+                for sample in scratch[..input.len()].chunks_exact_mut(width) {
+                    sample.reverse();
+                }
+                self.inner.write_all(&scratch[..input.len()])?;
+            }
         } else {
             self.inner.write_all(pcm)?;
         }
         self.data_bytes = next;
+        self.state = State::Open;
         Ok(())
     }
-
-    /// Append IEEE f32 samples. Spec must be [`WriteFormat::F32`].
+    /// Append IEEE f32 using bounded conversion scratch.
     pub fn write_f32_samples(&mut self, samples: &[f32]) -> Result<()> {
+        self.require_open()?;
         if self.spec.format != WriteFormat::F32 {
             return Err(WavError::unsupported_codec(3));
         }
-        let ch = usize::from(self.spec.channels);
-        if ch == 0 || !samples.len().is_multiple_of(ch) {
+        let channels = usize::from(self.spec.channels);
+        if !samples.len().is_multiple_of(channels) {
             return Err(WavError::OddPcm);
         }
-        let mut buf = Vec::with_capacity(samples.len().saturating_mul(4));
-        for s in samples {
-            buf.extend_from_slice(&s.to_le_bytes());
+        let bytes = samples.len().checked_mul(4).ok_or(WavError::RiffTooLarge)?;
+        let next = self
+            .data_bytes
+            .checked_add(bytes as u64)
+            .ok_or(WavError::RiffTooLarge)?;
+        let promote = self.layout.overflows(self.spec, next);
+        if promote && self.layout == Layout::Rifx {
+            return Err(WavError::RiffTooLarge);
         }
-        self.write_pcm(&buf)
+        let target = if promote {
+            self.layout.promoted()
+        } else {
+            self.layout
+        };
+        target.file_len(self.spec, next)?;
+        let mut scratch = [0u8; 8192];
+        let chunk = scratch.len() / 4 / channels * channels;
+        for part in samples.chunks(chunk) {
+            for (dst, sample) in scratch.as_chunks_mut::<4>().0.iter_mut().zip(part) {
+                dst.copy_from_slice(&sample.to_le_bytes());
+            }
+            self.write_pcm(&scratch[..part.len() * 4])?;
+        }
+        Ok(())
     }
-
-    /// Bytes written to the `data` chunk so far.
+    /// Bytes from completely successful payload writes; a failed writer may
+    /// contain an additional partial write and must not be reused.
     #[must_use]
     pub fn data_bytes(&self) -> u64 {
         self.data_bytes
     }
 
-    /// Patch RIFF / `fact` / `data` sizes and flush. Safe to call once.
+    /// Patch sizes and flush. Repeated successful finalization is harmless.
+    /// Any I/O failure is terminal; neither retry nor Drop repairs the file.
     pub fn finalize(&mut self) -> Result<()> {
-        if self.finalized {
+        if self.state == State::Finalized {
             return Ok(());
         }
-        self.pad_odd_chunk()?;
-        self.patch()?;
-        self.inner.flush()?;
-        self.finalized = true;
-        Ok(())
-    }
-
-    fn pad_odd_chunk(&mut self) -> Result<()> {
-        if self.data_bytes % 2 == 1 && !self.odd_padded {
+        self.require_open()?;
+        let header = self.layout.header(self.spec, self.data_bytes)?;
+        let end = self.layout.file_len(self.spec, self.data_bytes)?;
+        self.state = State::Failed;
+        if self.data_bytes & 1 != 0 {
             self.inner.write_all(&[0])?;
-            self.odd_padded = true;
         }
+        self.inner.seek(SeekFrom::Start(0))?;
+        self.inner.write_all(&header)?;
+        self.inner.seek(SeekFrom::Start(end))?;
+        self.inner.flush()?;
+        self.state = State::Finalized;
         Ok(())
     }
-
-    /// Rewrite a RIFF or extensible header as RF64 and slide the payload.
     fn promote_to_rf64(&mut self) -> Result<()> {
-        if matches!(self.kind, WriterKind::Rf64 | WriterKind::Rf64Extensible) {
+        let next = self.layout.promoted();
+        if matches!(self.layout, Layout::Rf64 | Layout::Rf64Extensible) {
             return Ok(());
         }
-        let ext = self.kind == WriterKind::Extensible;
-        if self.kind != WriterKind::Riff && !ext {
-            return Err(WavError::format(FormatKind::InvalidOperation));
-        }
-        let old_len = u64::from(if ext {
-            extensible_riff_prefix(self.spec)
-        } else {
-            riff_prefix(self.spec)
-        })
-        .saturating_add(8);
-        let new_len = if ext {
-            rf64_extensible_header_len(self.spec)
-        } else {
-            rf64_header_len(self.spec)
-        };
-        let delta = new_len.saturating_sub(old_len);
-        let payload = self.data_bytes;
-        const BLOCK: usize = 64 * 1024;
-        let mut buf = [0u8; BLOCK];
-        let mut remaining = payload;
+        let old_len = self.layout.header_len(self.spec);
+        let new_len = next.header_len(self.spec);
+        let header = next.header(self.spec, self.data_bytes)?;
+        let mut scratch = [0u8; 65536];
+        let mut remaining = self.data_bytes;
         while remaining > 0 {
-            let n = remaining.min(BLOCK as u64) as usize;
-            let src = old_len.saturating_add(remaining).saturating_sub(n as u64);
-            let dst = src.saturating_add(delta);
+            let n = remaining.min(scratch.len() as u64) as usize;
+            let src = old_len + remaining - n as u64;
             self.inner.seek(SeekFrom::Start(src))?;
-            self.inner.read_exact(&mut buf[..n])?;
-            self.inner.seek(SeekFrom::Start(dst))?;
-            self.inner.write_all(&buf[..n])?;
+            self.inner.read_exact(&mut scratch[..n])?;
+            self.inner.seek(SeekFrom::Start(src + new_len - old_len))?;
+            self.inner.write_all(&scratch[..n])?;
             remaining -= n as u64;
-        }
-        let fb = frame_bytes(self.spec)? as u64;
-        let frames = payload.checked_div(fb).unwrap_or(0);
-        let mut header = Vec::with_capacity(new_len as usize);
-        if ext {
-            push_rf64_extensible_header(&mut header, self.spec, payload, frames)?;
-            self.kind = WriterKind::Rf64Extensible;
-        } else {
-            push_rf64_header(&mut header, self.spec, payload, frames)?;
-            self.kind = WriterKind::Rf64;
         }
         self.inner.seek(SeekFrom::Start(0))?;
         self.inner.write_all(&header)?;
         self.inner
-            .seek(SeekFrom::Start(new_len.saturating_add(payload)))?;
+            .seek(SeekFrom::Start(new_len + self.data_bytes))?;
+        self.layout = next;
         Ok(())
     }
-
     #[cfg(test)]
     pub(crate) fn force_rf64(&mut self) -> Result<()> {
-        self.promote_to_rf64()
-    }
-
-    fn patch(&mut self) -> Result<()> {
-        match self.kind {
-            WriterKind::Rf64 | WriterKind::Rf64Extensible => self.patch_rf64(),
-            WriterKind::Extensible => self.patch_sized(
-                extensible_riff_prefix(self.spec),
-                extensible_data_len_pos(self.spec),
-                extensible_fact_frames_pos(self.spec),
-                false,
-            ),
-            WriterKind::Riff => self.patch_sized(
-                riff_prefix(self.spec),
-                data_len_pos(self.spec),
-                fact_frames_pos(self.spec),
-                false,
-            ),
-            WriterKind::Rifx => self.patch_sized(
-                riff_prefix(self.spec),
-                data_len_pos(self.spec),
-                fact_frames_pos(self.spec),
-                true,
-            ),
-        }
-    }
-
-    fn patch_sized(
-        &mut self,
-        prefix: u32,
-        data_pos: u64,
-        fact_pos: Option<u64>,
-        be: bool,
-    ) -> Result<()> {
-        let data_len =
-            u32_len(usize::try_from(self.data_bytes).map_err(|_| WavError::RiffTooLarge)?)?;
-        let riff_len = riff_body_len(prefix, data_len)?;
-        let enc = |v: u32| if be { v.to_be_bytes() } else { v.to_le_bytes() };
-        self.inner.seek(SeekFrom::Start(4))?;
-        self.inner.write_all(&enc(riff_len))?;
-        if let Some(pos) = fact_pos {
-            let fb = frame_bytes(self.spec)? as u32;
-            let frames = data_len.checked_div(fb).unwrap_or(0);
-            self.inner.seek(SeekFrom::Start(pos))?;
-            self.inner.write_all(&enc(frames))?;
-        }
-        self.inner.seek(SeekFrom::Start(data_pos))?;
-        self.inner.write_all(&enc(data_len))?;
-        self.inner.seek(SeekFrom::End(0))?;
-        Ok(())
-    }
-
-    fn patch_rf64(&mut self) -> Result<()> {
-        let ext = self.kind == WriterKind::Rf64Extensible;
-        let data_len = self.data_bytes;
-        let fb = frame_bytes(self.spec)? as u64;
-        let frames = data_len.checked_div(fb).unwrap_or(0);
-        let header_len = if ext {
-            rf64_extensible_header_len(self.spec)
-        } else {
-            rf64_header_len(self.spec)
-        };
-        let riff_size = header_len
-            .saturating_add(padded_data_len(data_len))
-            .saturating_sub(8);
-        self.inner.seek(SeekFrom::Start(RF64_RIFF_SIZE_POS))?;
-        self.inner.write_all(&riff_size.to_le_bytes())?;
-        self.inner.seek(SeekFrom::Start(RF64_DATA_SIZE_POS))?;
-        self.inner.write_all(&data_len.to_le_bytes())?;
-        self.inner.seek(SeekFrom::Start(RF64_SAMPLE_COUNT_POS))?;
-        self.inner.write_all(&frames.to_le_bytes())?;
-        if self.spec.format.has_fact() {
-            let fact = frames.min(u64::from(u32::MAX)) as u32;
-            let pos = if ext {
-                RF64_EXTENSIBLE_FACT_FRAMES_POS
-            } else {
-                RF64_FACT_FRAMES_POS
-            };
-            self.inner.seek(SeekFrom::Start(pos))?;
-            self.inner.write_all(&fact.to_le_bytes())?;
-        }
-        self.inner.seek(SeekFrom::End(0))?;
+        self.require_open()?;
+        self.state = State::Failed;
+        self.promote_to_rf64()?;
+        self.state = State::Open;
         Ok(())
     }
 }
-
-fn overflow(prefix: u32, data_len: u64) -> bool {
-    u64::from(prefix).saturating_add(padded_data_len(data_len)) > u64::from(u32::MAX)
-}
-
 impl<W: Read + Write + Seek> Drop for WavWriter<W> {
     fn drop(&mut self) {
-        if !self.finalized {
-            let _ = self.pad_odd_chunk();
-            let _ = self.patch();
-            let _ = self.inner.flush();
+        if self.state == State::Open {
+            let _ = self.finalize();
         }
     }
 }

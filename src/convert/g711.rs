@@ -85,8 +85,7 @@ pub(crate) fn table_for(alaw: bool) -> &'static [f32; 256] {
 
 #[inline]
 pub(crate) fn lut(table: &[f32; 256], b: u8) -> f32 {
-    // SAFETY: `b` is u8, table length is 256.
-    unsafe { *table.get_unchecked(b as usize) }
+    table[usize::from(b)]
 }
 
 /// One byte per sample to planar mono f32.
@@ -127,58 +126,45 @@ pub(crate) fn mix(src: &[u8], dst: &mut [f32], channels: usize, table: &[f32; 25
     }
 }
 
-const ALAW_SEG_END: [i32; 8] = [0xFF, 0x1FF, 0x3FF, 0x7FF, 0xFFF, 0x1FFF, 0x3FFF, 0x7FFF];
-/// 16-bit biased endpoints (Sun 14-bit `seg_uend` does not match `ulaw2linear`).
-const ULAW_SEG_END: [i32; 8] = [0xFC, 0x1F8, 0x3F0, 0x7E0, 0xFC0, 0x1F80, 0x3F00, 0x7E00];
-
-fn search_seg(val: i32, ends: &[i32; 8]) -> usize {
-    ends.iter().position(|&e| val <= e).unwrap_or(8)
-}
-
-/// Sun `linear2alaw`.
-#[must_use]
-pub(crate) fn linear_to_alaw(pcm_val: i32) -> u8 {
-    let (mask, mag) = if pcm_val >= 0 {
-        (0xD5u8, pcm_val)
-    } else {
-        (0x55u8, -pcm_val - 8)
-    };
-    let seg = search_seg(mag, &ALAW_SEG_END);
-    if seg >= 8 {
-        0x7F ^ mask
-    } else {
-        let quant = if seg < 2 {
-            (mag >> 4) as u8
+/// Quantize on the 14-bit PCM grid. Adjacent reconstruction levels define
+/// midpoint thresholds; ties select the higher magnitude. Negative inputs
+/// round down to that grid, matching the ffmpeg encoder oracle.
+fn linear_to_xlaw(pcm: i32, alaw: bool) -> u8 {
+    let magnitude = (pcm >> 2).unsigned_abs();
+    let mask = if alaw { 0xd5 } else { 0xff };
+    let level = |index: u8| -> u32 {
+        if alaw {
+            alaw_to_linear(index ^ mask) as u32
         } else {
-            (mag >> (seg + 3)) as u8
-        };
-        (((seg as u8) << 4) | (quant & 0x0F)) ^ mask
+            mulaw_to_linear(index ^ mask) as u32
+        }
+    };
+    let mut low = 0u8;
+    let mut high = 127u8;
+    while low < high {
+        let mid = low + (high - low) / 2;
+        let threshold = (level(mid) + level(mid + 1) + 4) / 8;
+        if magnitude < threshold {
+            high = mid;
+        } else {
+            low = mid + 1;
+        }
     }
+    low ^ mask ^ if pcm < 0 { 0x80 } else { 0 }
 }
 
-/// Sun `linear2ulaw`.
 #[must_use]
-pub(crate) fn linear_to_ulaw(pcm_val: i32) -> u8 {
-    const BIAS: i32 = 0x84;
-    const CLIP: i32 = 32635;
-    let (mask, mut mag) = if pcm_val < 0 {
-        (0x7Fu8, BIAS - pcm_val)
-    } else {
-        (0xFFu8, pcm_val + BIAS)
-    };
-    if mag > CLIP {
-        mag = CLIP;
-    }
-    let seg = search_seg(mag, &ULAW_SEG_END);
-    if seg >= 8 {
-        0x7F ^ mask
-    } else {
-        let uval = ((seg as u8) << 4) | (((mag >> (seg + 3)) as u8) & 0x0F);
-        uval ^ mask
-    }
+pub(crate) fn linear_to_alaw(pcm: i32) -> u8 {
+    linear_to_xlaw(pcm, true)
+}
+
+#[must_use]
+pub(crate) fn linear_to_ulaw(pcm: i32) -> u8 {
+    linear_to_xlaw(pcm, false)
 }
 
 /// Interleaved little-endian i16 to G.711 bytes.
+#[cfg(test)]
 pub(crate) fn s16le_to_g711(pcm: &[u8], alaw: bool) -> crate::Result<Vec<u8>> {
     if !pcm.len().is_multiple_of(2) {
         return Err(crate::WavError::OddPcm);

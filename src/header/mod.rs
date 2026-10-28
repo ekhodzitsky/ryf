@@ -157,17 +157,12 @@ pub(crate) struct FmtFields {
     pub(crate) sample_rate: u32,
     /// Bytes per container sample of a single channel (PCM path).
     pub(crate) sample_width: usize,
-    /// ADPCM block size and layout (ignored for PCM).
-    pub(crate) adpcm_ms: Option<MsAdpcmParams>,
-    pub(crate) adpcm_ima: Option<ImaAdpcmParams>,
+    /// Exactly one codec-specific parameter record, or none for PCM/G.711.
+    pub(crate) params: CodecParams,
     /// Sample multi-byte fields are big-endian (RIFX).
     pub(crate) big_endian: bool,
     /// WAVE `wFormatTag` (extensible is `0xFFFE`).
     pub(crate) format_tag: u16,
-    /// Set for G.726. `None` for every other codec.
-    pub(crate) g726: Option<G726Params>,
-    /// Raw numbers for tag `0x0064`, before classification.
-    pub(crate) tag0064: Option<Tag0064Facts>,
 }
 
 /// G.726 codeword width and octet packing selected from `fmt `.
@@ -196,6 +191,17 @@ pub(crate) struct WavHeader {
     pub(crate) declared_sample_count: Option<u64>,
 }
 
+impl WavHeader {
+    /// A declared payload never extends past the known source length.
+    pub(crate) fn data_len(&self, byte_len: Option<u64>) -> Option<u64> {
+        let available = byte_len.map(|n| n.saturating_sub(self.data_pos));
+        match (self.declared_data_len, available) {
+            (Some(declared), Some(actual)) => Some(declared.min(actual)),
+            (declared, actual) => declared.or(actual),
+        }
+    }
+}
+
 /// WAVE format tags (mmreg.h).
 pub(crate) const WAVE_FORMAT_PCM: u16 = 0x0001;
 pub(crate) const WAVE_FORMAT_ADPCM_MS: u16 = 0x0002;
@@ -218,8 +224,7 @@ pub(crate) const WAVE_FORMAT_ADPCM_G722: u16 = 0x028F;
 pub(crate) const WAVE_FORMAT_EXTENSIBLE: u16 = 0xFFFE;
 
 /// SubFormat GUIDs for WAVE_FORMAT_EXTENSIBLE (ksmedia.h), in on-disk byte
-/// order. The mu-law subtype tag is 0x04 in the GUID form even though the
-/// plain format tag is 0x0007 - kept identical to the historical demuxer.
+/// order. The first GUID field is the corresponding WAVE format tag.
 #[rustfmt::skip]
 pub(crate) const KSDATAFORMAT_SUBTYPE_PCM: [u8; 16] = [
     0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
@@ -237,7 +242,7 @@ pub(crate) const KSDATAFORMAT_SUBTYPE_ALAW: [u8; 16] = [
 ];
 #[rustfmt::skip]
 pub(crate) const KSDATAFORMAT_SUBTYPE_MULAW: [u8; 16] = [
-    0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+    0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
     0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71,
 ];
 #[rustfmt::skip]
@@ -332,7 +337,10 @@ fn fix_wave_channel_mask(channel_mask: u32, num_channels: u16) -> Option<u32> {
 }
 
 mod fmt;
+mod params;
+pub(crate) use params::CodecParams;
 mod riff;
+mod size_table;
 
 pub(crate) use riff::parse_header;
 
@@ -342,3 +350,10 @@ mod header_more_tests;
 #[cfg(test)]
 #[path = "../header_tests.rs"]
 mod header_tests;
+
+// Read legacy files emitted before the standard mu-law GUID was corrected.
+pub(crate) const LEGACY_SUBTYPE_MULAW: [u8; 16] = {
+    let mut guid = KSDATAFORMAT_SUBTYPE_MULAW;
+    guid[0] = 4;
+    guid
+};

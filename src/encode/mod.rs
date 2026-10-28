@@ -10,12 +10,12 @@ use std::path::Path;
 use crate::error::{Result, WavError};
 
 mod header;
+mod layout;
 mod writer;
 
 use header::{
     frame_bytes, needs_rf64, needs_rf64_extensible, push_extensible_header, push_header,
-    push_rf64_extensible_header, push_rf64_header, push_rifx_header, swap_sample_bytes, u32_len,
-    validate_spec,
+    push_rf64_extensible_header, push_rf64_header, push_rifx_header, u32_len, validate_spec,
 };
 pub use writer::WavWriter;
 
@@ -248,14 +248,12 @@ pub fn encode_f32(samples: &[f32], sample_rate: u32, channels: u16) -> Result<Ve
         return Err(WavError::OddPcm);
     }
     let nbytes = samples.len().checked_mul(4).ok_or(WavError::RiffTooLarge)?;
+    let mut out = Vec::with_capacity(94usize.saturating_add(nbytes));
     if needs_rf64(spec, nbytes as u64) {
-        let mut pcm = Vec::with_capacity(nbytes);
-        append_f32_le(&mut pcm, samples);
-        return encode_rf64(spec, &pcm);
+        push_rf64_header(&mut out, spec, nbytes as u64, (samples.len() / ch) as u64)?;
+    } else {
+        push_header(&mut out, spec, u32_len(nbytes)?)?;
     }
-    let data_len = u32_len(nbytes)?;
-    let mut out = Vec::with_capacity(58usize.saturating_add(nbytes));
-    push_header(&mut out, spec, data_len)?;
     append_f32_le(&mut out, samples);
     Ok(out)
 }
@@ -281,9 +279,29 @@ fn encode_g711(samples: &[f32], sample_rate: u32, channels: u16, alaw: bool) -> 
     if !samples.len().is_multiple_of(ch) {
         return Err(WavError::OddPcm);
     }
-    let s16 = crate::f32_to_s16le(samples);
-    let packed = crate::convert::g711::s16le_to_g711(&s16, alaw)?;
-    encode(spec, &packed)
+    let mut out = Vec::with_capacity(94usize.saturating_add(samples.len()));
+    if needs_rf64(spec, samples.len() as u64) {
+        push_rf64_header(
+            &mut out,
+            spec,
+            samples.len() as u64,
+            (samples.len() / ch) as u64,
+        )?;
+    } else {
+        push_header(&mut out, spec, u32_len(samples.len())?)?;
+    }
+    for sample in samples {
+        let value = i32::from(crate::convert::f32_to_i16(*sample));
+        out.push(if alaw {
+            crate::convert::g711::linear_to_alaw(value)
+        } else {
+            crate::convert::g711::linear_to_ulaw(value)
+        });
+    }
+    if samples.len() % 2 == 1 {
+        out.push(0);
+    }
+    Ok(out)
 }
 
 /// Encode as RIFX (big-endian). `pcm` is the same little-endian payload as [`encode`].
@@ -293,10 +311,16 @@ pub fn encode_rifx(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
         return Err(WavError::RiffTooLarge);
     }
     let data_len = u32_len(pcm.len())?;
-    let payload = swap_sample_bytes(pcm, spec.format.bytes_per_sample());
-    let mut out = Vec::with_capacity(58usize.saturating_add(payload.len()));
+    let mut out = Vec::with_capacity(58usize.saturating_add(pcm.len()));
     push_rifx_header(&mut out, spec, data_len)?;
-    append_payload(&mut out, &payload);
+    let start = out.len();
+    out.extend_from_slice(pcm);
+    for sample in out[start..].chunks_exact_mut(spec.format.bytes_per_sample()) {
+        sample.reverse();
+    }
+    if pcm.len() % 2 == 1 {
+        out.push(0);
+    }
     Ok(out)
 }
 
@@ -319,6 +343,7 @@ pub fn encode_extensible(spec: WriteSpec, pcm: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+#[allow(unsafe_code)]
 fn append_f32_le(out: &mut Vec<u8>, samples: &[f32]) {
     #[cfg(target_endian = "little")]
     {

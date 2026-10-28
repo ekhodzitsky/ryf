@@ -97,3 +97,10 @@ pub(super) fn convert_f32_mono_scalar(src: &[u8], dst: &mut [f32]) {
         i += 1;
     }
 }
+
+#[inline]
+pub(crate) fn f32_to_i16(sample: f32) -> i16 {
+    (sample * 32_768.0)
+        .round()
+        .clamp(f32::from(i16::MIN), f32::from(i16::MAX)) as i16
+}

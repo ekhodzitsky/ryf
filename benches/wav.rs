@@ -11,6 +11,8 @@
 //! ffmpeg is a **correctness oracle**, not a speed peer (process spawn).
 //! Symphonia does not encode. wavers encode is path-only - not in this bench.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::time::Duration;
 
@@ -62,6 +64,7 @@ fn s16_tone() -> Vec<i16> {
     (0..FRAMES).map(|i| (i as i16).wrapping_mul(13)).collect()
 }
 
+#[allow(unsafe_code)]
 fn i16_as_le_bytes(samples: &[i16]) -> Vec<u8> {
     let n = samples.len() * 2;
     #[cfg(target_endian = "little")]
@@ -264,6 +267,36 @@ fn benches(c: &mut Criterion) {
     let tone = s16_tone();
     let f32_tone: Vec<f32> = tone.iter().map(|&s| s as f32 / 32_768.0).collect();
 
+    // Validate peers outside timing; their float normalization can differ by
+    // one PCM16 quantization step, so this checks length and bounded error.
+    for (input, is_float) in [(s16_mono, false), (s16_st, false), (f32_mono, true)] {
+        let expected = ryf_decode_mono(input);
+        let hound = if is_float {
+            hound_f32_mono(input)
+        } else {
+            hound_s16_to_mixed_f32(input)
+        };
+        let peers = vec![
+            hound,
+            symphonia_decode_mixed_f32(input),
+            wavers_decode_mixed_f32(input),
+        ];
+        #[cfg(feature = "bench-c")]
+        let peers = {
+            let mut peers = peers;
+            peers.push(drwav::decode_mixed_f32(input));
+            peers
+        };
+        for peer in peers {
+            assert_eq!(peer.len(), expected.len());
+            assert!(
+                peer.iter()
+                    .zip(&expected)
+                    .all(|(a, b)| (a - b).abs() <= 1.0 / 32768.0)
+            );
+        }
+    }
+
     let mut decode = c.benchmark_group("decode");
     decode.throughput(Throughput::Bytes(s16_mono.len() as u64));
     decode.bench_function("ryf/s16_mono_2s", |b| {
@@ -288,23 +321,22 @@ fn benches(c: &mut Criterion) {
             std::hint::black_box(
                 decode_bytes(s16_st, opts.clone())
                     .expect("ryf decode")
-                    .channels[0]
-                    .len(),
+                    .channels,
             )
         });
     });
     decode.bench_function("hound/s16_stereo_mix_2s", |b| {
-        b.iter(|| std::hint::black_box(hound_s16_to_mixed_f32(s16_st).len()));
+        b.iter(|| std::hint::black_box(hound_s16_to_mixed_f32(s16_st)));
     });
     decode.bench_function("symphonia/s16_stereo_mix_2s", |b| {
-        b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(s16_st).len()));
+        b.iter(|| std::hint::black_box(symphonia_decode_mixed_f32(s16_st)));
     });
     decode.bench_function("wavers/s16_stereo_mix_2s", |b| {
-        b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(s16_st).len()));
+        b.iter(|| std::hint::black_box(wavers_decode_mixed_f32(s16_st)));
     });
     #[cfg(feature = "bench-c")]
     decode.bench_function("dr_wav/s16_stereo_mix_2s", |b| {
-        b.iter(|| std::hint::black_box(drwav::decode_mixed_f32(s16_st).len()));
+        b.iter(|| std::hint::black_box(drwav::decode_mixed_f32(s16_st)));
     });
     decode.throughput(Throughput::Bytes(f32_mono.len() as u64));
     decode.bench_function("ryf/f32_mono_2s", |b| {
@@ -367,6 +399,7 @@ fn benches(c: &mut Criterion) {
             let mut src = ryf::ByteSource::from_slice(s16_mono);
             let mut n = 0usize;
             ryf::decode_streaming(&mut src, &opts, |block| {
+                std::hint::black_box(block.planar);
                 n += block.frames;
                 Ok(())
             })

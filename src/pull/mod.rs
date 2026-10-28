@@ -12,6 +12,7 @@ mod g722;
 mod g726;
 mod gate;
 mod gsm;
+mod input;
 mod pcm;
 mod special;
 mod stream;
@@ -19,11 +20,13 @@ mod stream;
 #[cfg(test)]
 pub(crate) use adpcm::adpcm_est_frames;
 #[cfg(test)]
+pub(crate) use adpcm::adpcm_frames_capped;
+#[cfg(test)]
 pub(crate) use adpcm::decode_adpcm_interleaved;
-pub(crate) use adpcm::{adpcm_frames_capped, ensure_adpcm_enabled};
-pub(crate) use gate::codec_gate;
+#[cfg(test)]
+pub(crate) use adpcm::ensure_adpcm_enabled;
+pub(crate) use gate::{codec_gate, frame_layout};
 pub(crate) use pcm::decode_collect;
-pub(crate) use special::framed_count;
 
 /// Max frames per pull block (~256 KiB of source PCM).
 #[inline]
@@ -75,13 +78,6 @@ fn reject_output_too_large(n_out: usize, frames: usize, max_bytes: u64) -> Resul
     Ok(())
 }
 
-/// Defense-in-depth: `open_decode` already rejects over-budget plans, so
-/// this is false on the success path.
-#[inline]
-fn need_duration_check(total_frames: usize, max_samples: usize) -> bool {
-    total_frames > max_samples
-}
-
 /// Metadata returned by [`decode_streaming`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -110,13 +106,9 @@ pub struct StreamBlock<'a> {
 /// Validated decode plan; stream is positioned at the first data byte.
 pub(crate) struct DecodePlan {
     pub(crate) sample_rate: u32,
-    pub(crate) channels: usize,
-    pub(crate) sample_width: usize,
     pub(crate) frame_bytes: usize,
     pub(crate) total_frames: usize,
     pub(crate) max_samples: usize,
-    pub(crate) codec: SampleCodec,
-    pub(crate) big_endian: bool,
     pub(crate) mode: ChannelMode,
     #[cfg_attr(not(feature = "adpcm"), allow(dead_code))]
     pub(crate) data_len: u64,
@@ -132,50 +124,18 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
     let sample_rate = gate::codec_gate(&mut header.fmt, opts)?;
 
     let channels = header.fmt.channels;
-    let sample_width = header.fmt.sample_width;
     let max_samples = opts.max_frames(sample_rate);
 
     let stream_len = mss.byte_len().ok_or(WavError::StreamLengthUnknown)?;
-    let available = stream_len.saturating_sub(header.data_pos);
-    let data_len = match header.declared_data_len {
-        Some(declared) => declared.min(available),
-        None => available,
-    };
-
-    let (frame_bytes, total_frames) = if header.fmt.codec.is_adpcm() {
-        let (ba, ch, ima) = match (header.fmt.adpcm_ms.as_ref(), header.fmt.adpcm_ima.as_ref()) {
-            (Some(p), _) => (u64::from(p.block_align), p.channels as u64, false),
-            (_, Some(p)) => (u64::from(p.block_align), p.channels as u64, true),
-            _ => (0, 1, false),
-        };
-        let est = adpcm::adpcm_frames_capped(data_len, ba, ch, ima, header.declared_sample_count);
-        reject_too_many_frames(est, sample_rate, max_samples, max_secs)?;
-        (0, est as usize)
-    } else if let Some((fb, frames)) =
-        special::framed_count(&header.fmt, Some(data_len), header.declared_sample_count)?
-    {
-        let frames = frames.ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
-        reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
-        (fb, frames as usize)
-    } else {
-        let frame_bytes = sample_width
-            .checked_mul(channels)
-            .filter(|&n| n > 0)
-            .ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
-        let actual_frames = data_len / frame_bytes as u64;
-        // Duration follows *available* PCM. A lying `fact` / ds64 count that
-        // is smaller still wins (W64 8-byte pad, RF64 leftovers). A lying
-        // *larger* count is ignored - TooLong is about bytes on disk, not
-        // a header that claims three hours of a 10 s file.
-        let frames = match header.declared_sample_count {
-            // `fact` / ds64 sampleCount is samples per channel, not interleaved.
-            // Zero is treated as unknown (same as ds64).
-            Some(sc) if sc > 0 => actual_frames.min(sc),
-            _ => actual_frames,
-        };
-        reject_too_many_frames(frames, sample_rate, max_samples, max_secs)?;
-        (frame_bytes, frames as usize)
-    };
+    let data_len = header
+        .data_len(Some(stream_len))
+        .ok_or(WavError::StreamLengthUnknown)?;
+    let (frame_bytes, count) =
+        gate::frame_layout(&header.fmt, Some(data_len), header.declared_sample_count)?;
+    let count = count.ok_or_else(|| WavError::format(FormatKind::InvalidSize))?;
+    reject_too_many_frames(count, sample_rate, max_samples, max_secs)?;
+    let total_frames =
+        usize::try_from(count).map_err(|_| WavError::format(FormatKind::InvalidSize))?;
 
     let n_out = match mode {
         ChannelMode::Mono => 1,
@@ -185,13 +145,9 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
 
     Ok(DecodePlan {
         sample_rate,
-        channels,
-        sample_width,
         frame_bytes,
         total_frames,
         max_samples,
-        codec: header.fmt.codec,
-        big_endian: header.fmt.big_endian,
         mode,
         data_len,
         fmt: header.fmt,
@@ -203,7 +159,9 @@ pub(crate) fn open_decode(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Res
 /// Peak RAM is ~256 KiB of source bytes + one planar f32 block (not the
 /// full decoded file). ADPCM walks one compressed block at a time.
 ///
-/// Returns total frames delivered.
+/// Returns total frames delivered. On error, earlier callbacks may have
+/// consumed audio and the source cursor may have advanced. Rewind explicitly
+/// before retrying a complete decode.
 pub fn decode_streaming<F>(
     mss: &mut ByteSource<'_>,
     opts: &DecodeOptions,
@@ -216,7 +174,7 @@ where
     let sample_rate = plan.sample_rate;
     let channels = match plan.mode {
         ChannelMode::Mono => 1,
-        ChannelMode::Split => plan.channels,
+        ChannelMode::Split => plan.fmt.channels,
     };
     let frames = pull_decode(mss, &plan, &mut on_block)?;
     Ok(StreamInfo {
@@ -238,7 +196,7 @@ where
     let sample_rate = plan.sample_rate;
     let mode = plan.mode;
 
-    if plan.codec.is_adpcm() {
+    if plan.fmt.codec.is_adpcm() {
         return adpcm::pull_adpcm(mss, plan, &mut on_block);
     }
     if let Some(n) = special::pull_framed(mss, plan, &mut on_block)? {
@@ -248,25 +206,13 @@ where
     let frame_bytes = plan.frame_bytes;
     let total_frames = plan.total_frames;
     let max_samples = plan.max_samples;
-    let channels = plan.channels;
-    let sample_width = plan.sample_width;
-    let be = plan.big_endian;
-    let codec = plan.codec;
+    let channels = plan.fmt.channels;
+    let sample_width = plan.fmt.sample_width;
+    let be = plan.fmt.big_endian;
+    let codec = plan.fmt.codec;
 
     if be {
-        return stream::pull_generic(
-            mss,
-            mode,
-            codec,
-            channels,
-            sample_width,
-            frame_bytes,
-            total_frames,
-            max_samples,
-            sample_rate,
-            true,
-            &mut on_block,
-        );
+        return stream::pull_generic(mss, plan, &mut on_block);
     }
 
     match (mode, codec, channels, sample_width) {
@@ -294,44 +240,8 @@ where
             sample_rate,
             &mut on_block,
         ),
-        _ => stream::pull_generic(
-            mss,
-            mode,
-            codec,
-            channels,
-            sample_width,
-            frame_bytes,
-            total_frames,
-            max_samples,
-            sample_rate,
-            false,
-            &mut on_block,
-        ),
+        _ => stream::pull_generic(mss, plan, &mut on_block),
     }
-}
-
-fn pcm_short(_msg: &'static str) -> WavError {
-    WavError::format(FormatKind::Truncated)
-}
-
-/// Empty planar output (header-only / zero-length `data`).
-fn empty_planes(mode: ChannelMode, channels: usize) -> Vec<Vec<f32>> {
-    let n = match mode {
-        ChannelMode::Mono => 1,
-        ChannelMode::Split => channels.max(1),
-    };
-    vec![Vec::new(); n]
-}
-
-/// `f32` is `Copy` - dropping a partially-filled buffer is safe.
-fn uninit_f32_vec(n: usize) -> Vec<f32> {
-    let mut v = Vec::with_capacity(n);
-    #[allow(clippy::uninit_vec)]
-    // SAFETY: caller writes every element before return Ok; Drop is a no-op.
-    unsafe {
-        v.set_len(n);
-    }
-    v
 }
 
 fn emit_mono_block<F>(sample_rate: u32, mono: &[f32], on_block: &mut F) -> Result<()>
