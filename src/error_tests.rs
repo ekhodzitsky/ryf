@@ -71,3 +71,18 @@ fn display_and_helpers_cover_all_variants() {
         WavError::Io(_)
     ));
 }
+#[test]
+fn vector_byte_extent_boundary() -> crate::Result<()> {
+    let limit = isize::MAX as usize / 4;
+    super::check_vec_capacity::<f32>(limit)?;
+    assert!(matches!(
+        super::check_vec_capacity::<f32>(limit + 1),
+        Err(crate::WavError::OutputTooLarge { .. })
+    ));
+    super::check_vec_capacity::<u8>(isize::MAX as usize)?;
+    assert!(matches!(
+        super::check_vec_capacity::<u8>(isize::MAX as usize + 1),
+        Err(crate::WavError::OutputTooLarge { .. })
+    ));
+    Ok(())
+}

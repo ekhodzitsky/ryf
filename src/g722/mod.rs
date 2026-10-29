@@ -79,10 +79,7 @@ pub fn decode_g722(
     }
     let frames = (data.len() / ch) * 2;
     let max_samples = opts.max_frames(RATE);
-    if frames > max_samples {
-        let observed = frames as f64 / f64::from(RATE);
-        return Err(WavError::too_long(observed, opts.max_duration_secs));
-    }
+    crate::pull::check_duration(frames, max_samples, RATE)?;
     let n_out = match opts.channel_mode {
         ChannelMode::Mono => 1,
         ChannelMode::Split => ch,
@@ -93,6 +90,7 @@ pub fn decode_g722(
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));
     }
+    crate::error::check_vec_capacity::<f32>(frames)?;
     Ok(DecodedWav {
         sample_rate: RATE,
         channels: decode_planar(data, ch, opts.channel_mode),

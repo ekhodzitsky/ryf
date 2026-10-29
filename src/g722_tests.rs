@@ -237,6 +237,7 @@ fn wave_streaming_and_sdp_header_rate() -> crate::Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn ffmpeg_g722_wav_matches() -> crate::Result<()> {
     if !ffmpeg_available() {
         eprintln!("ffmpeg not available, skipping g722 oracle");

@@ -197,6 +197,7 @@ fn wave_leftover_byte_dropped() -> crate::Result<()> {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "Miri cannot spawn the external ffmpeg oracle")]
 fn ffmpeg_gsm_ms_wav_matches() -> crate::Result<()> {
     if !ffmpeg_available() {
         eprintln!("ffmpeg not available, skipping gsm oracle");

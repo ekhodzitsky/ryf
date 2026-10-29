@@ -383,6 +383,7 @@ pub fn s16le_to_f32(pcm: &[u8]) -> crate::Result<Vec<f32>> {
     if !pcm.len().is_multiple_of(2) {
         return Err(crate::WavError::OddPcm);
     }
+    crate::error::check_vec_capacity::<f32>(pcm.len() / 2)?;
     let mut out = Vec::with_capacity(pcm.len() / 2);
     for s in pcm.as_chunks::<2>().0 {
         let v = i16::from_le_bytes(*s);

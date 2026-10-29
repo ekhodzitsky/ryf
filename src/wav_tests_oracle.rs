@@ -48,13 +48,15 @@ pub fn own_channels_native(data: &[u8]) -> Result<(u32, Vec<Vec<f32>>)> {
 
 /// Whether ffmpeg + ffprobe are available for the differential gates.
 pub fn ffmpeg_available() -> bool {
-    ["ffmpeg", "ffprobe"].iter().all(|tool| {
-        std::process::Command::new(tool)
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
+    // Process spawning is unsupported by Miri, even with isolation disabled.
+    !cfg!(miri)
+        && ["ffmpeg", "ffprobe"].iter().all(|tool| {
+            std::process::Command::new(tool)
+                .arg("-version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        })
 }
 
 /// ffmpeg CLI oracle: decode the WAV bytes (written to a temp file) to

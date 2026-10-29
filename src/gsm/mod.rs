@@ -49,14 +49,12 @@ pub fn decode_gsm(data: &[u8], sample_rate: u32, opts: &DecodeOptions) -> Result
     }
     let frames = (data.len() / MS_BLOCK).saturating_mul(MS_SAMPLES);
     let max_samples = opts.max_frames(RATE);
-    if frames > max_samples {
-        let observed = frames as f64 / f64::from(RATE);
-        return Err(WavError::too_long(observed, opts.max_duration_secs));
-    }
+    crate::pull::check_duration(frames, max_samples, RATE)?;
     let out_bytes = (frames as u64).saturating_mul(4);
     if out_bytes > opts.max_output_bytes {
         return Err(WavError::output_too_large(out_bytes, opts.max_output_bytes));
     }
+    crate::error::check_vec_capacity::<f32>(frames)?;
     Ok(DecodedWav {
         sample_rate: RATE,
         channels: vec![decode_mono_f32(data)],

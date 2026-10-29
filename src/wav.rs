@@ -64,8 +64,9 @@ pub struct WavProbe {
 
 /// Read the stream head and report whether it marks a WAVE container:
 /// `RIFF` / `RIFX` / `RF64` / `BW64` + `"WAVE"`, or Sony Wave64 (GUID riff/wave).
-/// The stream is always rewound to position 0 afterwards, including on I/O
-/// error (rewind failure is returned only when the prefix read succeeded).
+/// Rewind to position 0 is attempted afterwards, including on I/O error.
+/// Rewind failure is returned only when the prefix read succeeded; otherwise
+/// the read error wins and cursor zero cannot be guaranteed.
 pub fn sniff_is_riff_wave(mss: &mut ByteSource<'_>) -> Result<bool> {
     let result = sniff_wave_prefix(mss);
     let rewind = mss.seek(SeekFrom::Start(0));
@@ -112,8 +113,10 @@ pub fn probe(mss: &mut ByteSource<'_>) -> Result<WavProbe> {
 }
 
 /// Probe a RIFF/WAVE stream (positioned at offset 0) without decoding PCM.
-/// The stream is always rewound to position 0 afterwards, including on error
-/// (rewind failure is returned only when the probe itself succeeded).
+/// Checks codec support and sample-rate policy, not duration/output budgets.
+/// Rewind to position 0 is attempted afterwards, including on error. Rewind
+/// failure is returned only when probing succeeded; otherwise the probe error
+/// wins and cursor zero cannot be guaranteed.
 pub fn probe_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<WavProbe> {
     let result = probe_inner(mss, opts);
     let rewind = mss.seek(SeekFrom::Start(0));
@@ -170,7 +173,7 @@ pub fn decode_bytes(data: &[u8], opts: DecodeOptions) -> Result<DecodedWav> {
 /// Decode a RIFF/WAVE stream at native sample rate under `opts`.
 ///
 /// Hot paths (mono s16 / mono f32 / stereo mix) write into one exact-size
-/// allocation with file-sized scratch; streaming API shares the same convert
+/// allocation with bounded scratch; streaming API shares the same convert
 /// kernels via [`crate::pull::decode_streaming`].
 pub fn decode_with(mss: &mut ByteSource<'_>, opts: &DecodeOptions) -> Result<DecodedWav> {
     let plan = open_decode(mss, opts)?;
@@ -214,6 +217,7 @@ fn decode_s16_from(src: &mut ByteSource<'_>) -> Result<(u32, Vec<u8>)> {
         return Err(WavError::OddPcm);
     }
     let n = usize::try_from(want).map_err(|_| WavError::format(FormatKind::InvalidSize))?;
+    crate::error::check_vec_capacity::<u8>(n)?;
     if let Some(rest) = src.remaining_slice() {
         if rest.len() < n {
             return Err(WavError::format(FormatKind::Truncated));
